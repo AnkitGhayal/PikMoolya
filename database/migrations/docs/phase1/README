@@ -1,0 +1,12 @@
+# PikMoolya — Phase 1
+
+PikMoolya: "Don't just know the price. Know the best way to sell."
+
+Phase 1 is the system-design foundation. It defines architecture, database schema,
+roles/permissions, API contracts, AI/ML architecture, security, mobile/web architecture,
+and project structure.
+
+IMPORTANT:
+- Do not build Phase 2 backend code yet.
+- Save this folder inside your main `pikmoolya/` project.
+- Phase 2 will implement the backend against this design.

@@ -1,0 +1,45 @@
+# Recommended Project Structure
+
+```text
+pikmoolya/
+├── apps/
+│   ├── mobile/                 # React Native + Expo
+│   ├── web/                    # Next.js buyer/admin
+│   └── api/                    # NestJS backend (Phase 2+)
+│
+├── services/
+│   └── ml/                     # FastAPI + ML (Phase 3/4+)
+│
+├── packages/
+│   ├── types/
+│   ├── validation/
+│   ├── constants/
+│   ├── translations/
+│   │   ├── en.json
+│   │   ├── hi.json
+│   │   └── mr.json
+│   └── database/
+│
+├── database/
+│   ├── migrations/
+│   │   └── 001_initial_schema.sql
+│   └── seeds/
+│
+├── infrastructure/
+├── docs/
+│   └── phase1/
+│
+├── .env.example
+├── docker-compose.yml
+└── README.md
+```
+
+## Phase 1 files
+
+Put the design documents in:
+`docs/phase1/`
+
+Put the SQL schema in:
+`database/migrations/001_initial_schema.sql`
+
+Do not put backend TypeScript code in Phase 1.
