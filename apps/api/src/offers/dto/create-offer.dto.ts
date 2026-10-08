@@ -3,6 +3,7 @@ import {
   IsDateString,
   IsNumber,
   IsOptional,
+  IsString,
   IsUUID,
   Min,
 } from 'class-validator';
@@ -10,6 +11,12 @@ import {
 export class CreateOfferDto {
   @IsUUID()
   listingId: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  quantity?: number;
 
   @IsNumber()
   @Min(0)
@@ -37,6 +44,14 @@ export class CreateOfferDto {
   @Min(0)
   @Type(() => Number)
   estimatedRiskCostPerUnit?: number;
+
+  @IsOptional()
+  @IsString()
+  deliveryTerms?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentTerms?: string;
 
   @IsOptional()
   @IsDateString()
