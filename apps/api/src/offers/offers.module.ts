@@ -7,11 +7,12 @@ import { OffersService } from './offers.service.js';
 import { Offer } from './entities/offer.entity.js';
 import { ProduceListing } from '../produce/entities/produce-listing.entity.js';
 import { NegotiationsModule } from '../negotiations/negotiations.module.js';
+import { Negotiation } from '../negotiations/entities/negotiation.entity.js';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    TypeOrmModule.forFeature([Offer, ProduceListing]),
+    TypeOrmModule.forFeature([Offer, ProduceListing, Negotiation]),
     NegotiationsModule,
   ],
   controllers: [OffersController],
