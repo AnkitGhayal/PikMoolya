@@ -20,70 +20,44 @@ export class Offer {
   @Column({ name: 'auction_id', type: 'uuid', nullable: true })
   auctionId: string | null;
 
-  @Column({
-    name: 'offered_price_per_unit',
-    type: 'numeric',
-  })
+  @Column({ name: 'quantity', type: 'numeric', precision: 14, scale: 3, nullable: true })
+  quantity: number | null;
+
+  @Column({ name: 'offered_price_per_unit', type: 'numeric' })
   offeredPricePerUnit: number;
 
-  @Column({
-    name: 'transport_cost_per_unit',
-    type: 'numeric',
-    nullable: true,
-  })
+  @Column({ name: 'transport_cost_per_unit', type: 'numeric', nullable: true })
   transportCostPerUnit: number | null;
 
-  @Column({
-    name: 'platform_fee_per_unit',
-    type: 'numeric',
-    nullable: true,
-  })
+  @Column({ name: 'platform_fee_per_unit', type: 'numeric', nullable: true })
   platformFeePerUnit: number | null;
 
-  @Column({
-    name: 'estimated_risk_cost_per_unit',
-    type: 'numeric',
-    nullable: true,
-  })
+  @Column({ name: 'estimated_risk_cost_per_unit', type: 'numeric', nullable: true })
   estimatedRiskCostPerUnit: number | null;
 
-  @Column({
-    name: 'effective_net_per_unit',
-    type: 'numeric',
-    nullable: true,
-  })
+  @Column({ name: 'effective_net_per_unit', type: 'numeric', nullable: true })
   effectiveNetPerUnit: number | null;
+
+  @Column({ name: 'delivery_terms', type: 'text', nullable: true })
+  deliveryTerms: string | null;
+
+  @Column({ name: 'payment_terms', type: 'text', nullable: true })
+  paymentTerms: string | null;
 
   @Column({
     name: 'status',
     type: 'enum',
     enumName: 'offer_status',
-    enum: [
-      'PENDING',
-      'ACCEPTED',
-      'REJECTED',
-      'EXPIRED',
-      'CANCELLED',
-    ],
+    enum: ['PENDING', 'COUNTERED', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'CANCELLED'],
   })
   status: string;
 
-  @Column({
-    name: 'expires_at',
-    type: 'timestamptz',
-    nullable: true,
-  })
+  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
   expiresAt: Date | null;
 
-  @CreateDateColumn({
-    name: 'created_at',
-    type: 'timestamptz',
-  })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({
-    name: 'updated_at',
-    type: 'timestamptz',
-  })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 }

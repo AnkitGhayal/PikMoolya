@@ -11,6 +11,7 @@ import { CreateOfferDto } from './dto/create-offer.dto.js';
 import { OfferActionDto } from './dto/offer-action.dto.js';
 import { ProduceListing } from '../produce/entities/produce-listing.entity.js';
 import { NegotiationsService } from '../negotiations/negotiations.service.js';
+import { Negotiation } from '../negotiations/entities/negotiation.entity.js';
 
 @Injectable()
 export class OffersService {
@@ -20,6 +21,9 @@ export class OffersService {
 
     @InjectRepository(ProduceListing)
     private readonly listingRepository: Repository<ProduceListing>,
+
+    @InjectRepository(Negotiation)
+    private readonly negotiationRepository: Repository<Negotiation>,
 
     private readonly negotiationsService: NegotiationsService,
   ) {}
@@ -88,11 +92,14 @@ export class OffersService {
           listingId: dto.listingId,
           buyerId,
           auctionId: dto.auctionId ?? null,
+          quantity: dto.quantity ? Number(dto.quantity) : Number(listing.quantity),
           offeredPricePerUnit:
             Number(dto.offeredPricePerUnit),
           transportCostPerUnit: transport,
           platformFeePerUnit: platformFee,
           estimatedRiskCostPerUnit: risk,
+          deliveryTerms: dto.deliveryTerms ?? null,
+          paymentTerms: dto.paymentTerms ?? null,
           effectiveNetPerUnit: Number(
             effectiveNet.toFixed(2),
           ),
@@ -233,16 +240,14 @@ export class OffersService {
         offerId,
       );
 
-    if (offer.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only pending offers can be accepted',
-      );
+    if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
+      throw new BadRequestException('Only active offers can be accepted');
     }
 
     offer.status = 'ACCEPTED';
 
-    const saved =
-      await this.offerRepository.save(offer);
+    const saved = await this.offerRepository.save(offer);
+    await this.negotiationRepository.save(this.negotiationRepository.create({ offerId: offer.id, actorUserId: farmerId, action: 'ACCEPT', pricePerUnit: Number(offer.offeredPricePerUnit), message: 'Offer accepted by farmer.', aiSuggested: false }));
 
     return {
       offer: saved,
@@ -262,16 +267,14 @@ export class OffersService {
         offerId,
       );
 
-    if (offer.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only pending offers can be rejected',
-      );
+    if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
+      throw new BadRequestException('Only active offers can be rejected');
     }
 
     offer.status = 'REJECTED';
 
-    const saved =
-      await this.offerRepository.save(offer);
+    const saved = await this.offerRepository.save(offer);
+    await this.negotiationRepository.save(this.negotiationRepository.create({ offerId: offer.id, actorUserId: farmerId, action: 'REJECT', pricePerUnit: Number(offer.offeredPricePerUnit), message: 'Offer rejected by farmer.', aiSuggested: false }));
 
     return {
       offer: saved,
@@ -300,17 +303,15 @@ export class OffersService {
         offerId,
       );
 
-    if (offer.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only pending offers can be countered',
-      );
+    if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
+      throw new BadRequestException('Only active offers can be countered');
     }
 
     const counterPrice =
       Number(dto.counterPricePerUnit);
 
-    offer.offeredPricePerUnit =
-      counterPrice;
+    offer.offeredPricePerUnit = counterPrice;
+    offer.quantity = dto.quantity !== undefined ? Number(dto.quantity) : offer.quantity;
 
     offer.effectiveNetPerUnit =
       Number(
@@ -330,8 +331,8 @@ export class OffersService {
 
     offer.status = 'COUNTERED';
 
-    const saved =
-      await this.offerRepository.save(offer);
+    const saved = await this.offerRepository.save(offer);
+    await this.negotiationRepository.save(this.negotiationRepository.create({ offerId: offer.id, actorUserId: farmerId, action: 'COUNTER', pricePerUnit: counterPrice, message: dto.message ?? 'Farmer submitted a counter offer.', aiSuggested: false }));
 
     return {
       offer: saved,
