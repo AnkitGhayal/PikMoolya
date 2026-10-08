@@ -88,11 +88,14 @@ export class OffersService {
           listingId: dto.listingId,
           buyerId,
           auctionId: dto.auctionId ?? null,
+          quantity: dto.quantity ? Number(dto.quantity) : Number(listing.quantity),
           offeredPricePerUnit:
             Number(dto.offeredPricePerUnit),
           transportCostPerUnit: transport,
           platformFeePerUnit: platformFee,
           estimatedRiskCostPerUnit: risk,
+          deliveryTerms: dto.deliveryTerms ?? null,
+          paymentTerms: dto.paymentTerms ?? null,
           effectiveNetPerUnit: Number(
             effectiveNet.toFixed(2),
           ),
@@ -233,10 +236,8 @@ export class OffersService {
         offerId,
       );
 
-    if (offer.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only pending offers can be accepted',
-      );
+    if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
+      throw new BadRequestException('Only active offers can be accepted');
     }
 
     offer.status = 'ACCEPTED';
@@ -262,10 +263,8 @@ export class OffersService {
         offerId,
       );
 
-    if (offer.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only pending offers can be rejected',
-      );
+    if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
+      throw new BadRequestException('Only active offers can be rejected');
     }
 
     offer.status = 'REJECTED';
@@ -300,17 +299,15 @@ export class OffersService {
         offerId,
       );
 
-    if (offer.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only pending offers can be countered',
-      );
+    if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
+      throw new BadRequestException('Only active offers can be countered');
     }
 
     const counterPrice =
       Number(dto.counterPricePerUnit);
 
-    offer.offeredPricePerUnit =
-      counterPrice;
+    offer.offeredPricePerUnit = counterPrice;
+    offer.quantity = dto.quantity !== undefined ? Number(dto.quantity) : offer.quantity;
 
     offer.effectiveNetPerUnit =
       Number(
