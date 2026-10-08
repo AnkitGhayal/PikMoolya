@@ -1661,7 +1661,7 @@ export default function App() {
                     style={styles.input}
                   />
                   <View style={styles.offerActions}>
-                  <TouchableOpacity
+                    <TouchableOpacity
                     style={styles.acceptButton}
                     onPress={() => acceptOffer(offer.id)}
                   >
@@ -1680,7 +1680,8 @@ export default function App() {
                   >
                     <Text style={styles.rejectButtonText}>Counter</Text>
                   </TouchableOpacity>
-                </View>
+                  </View>
+                </>
               ) : null}
             </View>
           ))
