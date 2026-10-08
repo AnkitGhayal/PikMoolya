@@ -1651,8 +1651,16 @@ export default function App() {
                 </Text>
               ) : null}
 
-              {offer.status === 'PENDING' ? (
-                <View style={styles.offerActions}>
+              {offer.status === 'PENDING' || offer.status === 'COUNTERED' ? (
+                <>
+                  <TextInput
+                    value={counterOfferPrice}
+                    onChangeText={setCounterOfferPrice}
+                    keyboardType="numeric"
+                    placeholder="Counter price per unit"
+                    style={styles.input}
+                  />
+                  <View style={styles.offerActions}>
                   <TouchableOpacity
                     style={styles.acceptButton}
                     onPress={() => acceptOffer(offer.id)}
