@@ -17,7 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const API_URL = 'http://10.108.139.217:3000';
 
-type Screen = 'home' | 'add' | 'listing' | 'offers' | 'orders';
+type Screen = 'home' | 'add' | 'listing' | 'offers' | 'orders' | 'buyer';
+type UserRole = 'FARMER' | 'BUYER' | 'ADMIN' | 'LOGISTICS_PARTNER';
 type Crop = {
   id: string;
   name: string;
@@ -170,6 +171,13 @@ export default function App() {
   const [cropLoadError, setCropLoadError] = useState('');
   const [cropDropdownOpen, setCropDropdownOpen] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [buyerDashboard, setBuyerDashboard] = useState<any>(null);
+  const [buyerOffers, setBuyerOffers] = useState<any[]>([]);
+  const [selectedBuyerListing, setSelectedBuyerListing] = useState<any>(null);
+  const [buyerOfferPrice, setBuyerOfferPrice] = useState('');
+  const [buyerOfferQuantity, setBuyerOfferQuantity] = useState('');
+  const [buyerOfferMessage, setBuyerOfferMessage] = useState('');
 
   const [priceFloor, setPriceFloor] = useState<any>(null);
   const [fairPrice, setFairPrice] = useState<any>(null);
@@ -220,8 +228,20 @@ export default function App() {
 
       if (!jwt) throw new Error('JWT token not found');
 
+      const meResponse = await axios.get(API_URL + '/auth/me', { headers: authHeaders(jwt) });
+      const serverRole = meResponse.data?.user?.role as UserRole;
+      if (!serverRole) throw new Error('Server did not return a user role');
+      setUserRole(serverRole);
       setToken(jwt);
-      await Promise.all([loadDashboard(jwt), loadCrops(jwt)]);
+      if (serverRole === 'FARMER') {
+        await Promise.all([loadDashboard(jwt), loadCrops(jwt)]);
+      } else if (serverRole === 'BUYER') {
+        await loadBuyerDashboard(jwt);
+        await loadBuyerOffers(jwt);
+        setScreen('buyer');
+      } else {
+        throw new Error('This mobile app currently supports Farmer and Buyer accounts.');
+      }
     } catch (error: any) {
       console.log('LOGIN ERROR:', error?.response?.data ?? error);
       setLoginError(
@@ -230,6 +250,36 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadBuyerDashboard = async (jwt = token!) => {
+    const response = await axios.get(API_URL + '/buyer-dashboard', { headers: authHeaders(jwt), timeout: 10000 });
+    setBuyerDashboard(response.data);
+  };
+
+  const loadBuyerOffers = async (jwt = token!) => {
+    const response = await axios.get(API_URL + '/offers/my', { headers: authHeaders(jwt), timeout: 10000 });
+    setBuyerOffers(Array.isArray(response.data) ? response.data : response.data?.offers ?? []);
+  };
+
+  const createBuyerOffer = async () => {
+    if (!selectedBuyerListing || !buyerOfferPrice) {
+      Alert.alert('Offer details needed', 'Enter an offer price before submitting.'); return;
+    }
+    try {
+      setLoading(true);
+      await axios.post(API_URL + '/offers', {
+        listingId: selectedBuyerListing.listingId,
+        quantity: buyerOfferQuantity ? Number(buyerOfferQuantity) : Number(selectedBuyerListing.quantity),
+        offeredPricePerUnit: Number(buyerOfferPrice),
+        deliveryTerms: buyerOfferMessage || undefined,
+      }, { headers: authHeaders() });
+      Alert.alert('Offer submitted', 'Your offer has been sent to the farmer.');
+      setBuyerOfferPrice(''); setBuyerOfferQuantity(''); setBuyerOfferMessage(''); setSelectedBuyerListing(null);
+      await loadBuyerOffers();
+    } catch (error: any) {
+      Alert.alert('Offer failed', getApiErrorMessage(error, 'Unable to submit the offer.'));
+    } finally { setLoading(false); }
   };
 
   const loadDashboard = async (jwt: string) => {
@@ -1612,6 +1662,41 @@ export default function App() {
     </SafeAreaView>
   );
 
+  const renderBuyer = () => {
+    const produce = buyerDashboard?.produce ?? [];
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <View><Text style={styles.greetingTitle}>Buyer Dashboard</Text><Text style={styles.greetingSubtitle}>Find produce and negotiate directly with farmers.</Text></View>
+            <TouchableOpacity onPress={() => { setToken(null); setUserRole(null); }}><Text style={styles.logoutText}>Logout</Text></TouchableOpacity>
+          </View>
+          <Text style={styles.sectionTitle}>Available Produce</Text>
+          {produce.map((item: any) => (
+            <View key={item.listingId} style={styles.listingCard}>
+              <View style={styles.listingMain}><Text style={styles.listingName}>{item.crop?.name ?? 'Produce'}</Text><Text style={styles.quantity}>{item.quantity} {item.unit ?? ''}</Text><Text style={styles.quantity}>{item.location ?? 'Location unavailable'}</Text><Text style={styles.statusText}>{item.quality?.message ?? 'Quality verification pending'}</Text></View>
+              <TouchableOpacity style={styles.acceptButton} onPress={() => setSelectedBuyerListing(item)}><Text style={styles.acceptButtonText}>Make Offer</Text></TouchableOpacity>
+            </View>
+          ))}
+          <Text style={[styles.sectionTitle, { marginTop: 22 }]}>My Offers</Text>
+          {buyerOffers.map((offer: any) => <View key={offer.id} style={styles.offerCard}><Text style={styles.offerBuyer}>Offer</Text><Text style={styles.offerPrice}>{money(offer.offeredPricePerUnit)} / unit</Text><Text style={styles.offerStatus}>{offer.status ?? 'PENDING'}</Text></View>)}
+          {selectedBuyerListing ? (
+            <View style={styles.loginCard}>
+              <Text style={styles.pageTitle}>Make an Offer</Text>
+              <Text style={styles.quantity}>{selectedBuyerListing.crop?.name} · Available {selectedBuyerListing.quantity} {selectedBuyerListing.unit}</Text>
+              <Text style={styles.inputLabel}>Offer price per unit</Text><TextInput value={buyerOfferPrice} onChangeText={setBuyerOfferPrice} keyboardType="numeric" style={styles.input} placeholder="Example: 2400" />
+              <Text style={styles.inputLabel}>Quantity</Text><TextInput value={buyerOfferQuantity} onChangeText={setBuyerOfferQuantity} keyboardType="numeric" style={styles.input} placeholder={String(selectedBuyerListing.quantity ?? '')} />
+              <Text style={styles.inputLabel}>Delivery terms</Text><TextInput value={buyerOfferMessage} onChangeText={setBuyerOfferMessage} style={styles.input} placeholder="Pickup from farm" />
+              <TouchableOpacity style={styles.primaryButton} onPress={createBuyerOffer} disabled={loading}><Text style={styles.primaryButtonText}>{loading ? 'Submitting...' : 'Submit Offer'}</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setSelectedBuyerListing(null)}><Text style={styles.secondaryButtonText}>Cancel</Text></TouchableOpacity>
+            </View>
+          ) : null}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  };
+
   const renderOrders = () => (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
@@ -1785,7 +1870,7 @@ export default function App() {
             <Text style={styles.inputLabel}>Mobile Number</Text>
             <TextInput
               value={phone}
-              editable={false}
+              editable={true}
               style={styles.input}
             />
 
@@ -1816,12 +1901,13 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.demoText}>Demo farmer account</Text>
+          <Text style={styles.demoText}>Sign in with your registered Farmer or Buyer account.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  if (screen === 'buyer' || userRole === 'BUYER') return renderBuyer();
   if (screen === 'add') return renderAdd();
   if (screen === 'listing') return renderListing();
   if (screen === 'offers') return renderOffers();
