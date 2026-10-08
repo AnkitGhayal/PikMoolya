@@ -178,6 +178,7 @@ export default function App() {
   const [buyerOfferPrice, setBuyerOfferPrice] = useState('');
   const [buyerOfferQuantity, setBuyerOfferQuantity] = useState('');
   const [buyerOfferMessage, setBuyerOfferMessage] = useState('');
+  const [counterOfferPrice, setCounterOfferPrice] = useState('');
 
   const [priceFloor, setPriceFloor] = useState<any>(null);
   const [fairPrice, setFairPrice] = useState<any>(null);
@@ -859,6 +860,18 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const counterOffer = async (offerId: string) => {
+    if (!counterOfferPrice) { Alert.alert('Counter price needed', 'Enter the price you want to counter with.'); return; }
+    try {
+      setLoading(true);
+      await axios.post(API_URL + '/offers/' + offerId + '/counter', { counterPricePerUnit: Number(counterOfferPrice) }, { headers: authHeaders() });
+      setCounterOfferPrice('');
+      await loadOffers();
+    } catch (error: any) {
+      Alert.alert('Could not counter offer', getApiErrorMessage(error, 'The counter offer could not be submitted.'));
+    } finally { setLoading(false); }
   };
 
   const loadOrders = async () => {
@@ -1652,6 +1665,12 @@ export default function App() {
                     onPress={() => rejectOffer(offer.id)}
                   >
                     <Text style={styles.rejectButtonText}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.rejectButton}
+                    onPress={() => counterOffer(offer.id)}
+                  >
+                    <Text style={styles.rejectButtonText}>Counter</Text>
                   </TouchableOpacity>
                 </View>
               ) : null}
