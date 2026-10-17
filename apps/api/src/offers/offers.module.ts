@@ -9,11 +9,18 @@ import { ProduceListing } from '../produce/entities/produce-listing.entity.js';
 import { NegotiationsModule } from '../negotiations/negotiations.module.js';
 import { Negotiation } from '../negotiations/entities/negotiation.entity.js';
 
+import { OrdersModule } from '../orders/orders.module.js';
+import { LogisticsModule } from '../logistics/logistics.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
+
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     TypeOrmModule.forFeature([Offer, ProduceListing, Negotiation]),
     NegotiationsModule,
+    OrdersModule,
+    LogisticsModule,
+    NotificationsModule,
   ],
   controllers: [OffersController],
   providers: [OffersService],

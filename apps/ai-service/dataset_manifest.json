@@ -1,0 +1,55 @@
+{
+  "pipelineVersion": "2.4.0",
+  "lastUpdated": "2026-10-08T00:00:00Z",
+  "approvedModelVersion": "MobileNetV3-AgriQuality-v2.3",
+  "datasets": [
+    {
+      "name": "ICAR Indian Crop Quality & Disease Benchmark",
+      "source": "Indian Council of Agricultural Research (ICAR)",
+      "license": "Government Open Data License - India (GODL)",
+      "version": "2.1.0",
+      "downloadDate": "2026-03-15",
+      "cropClasses": ["Wheat", "Rice", "Onion", "Tomato", "Soybean", "Cotton", "Gram", "Potato"],
+      "annotationCount": 48500,
+      "imageCount": 32100,
+      "geographicalCoverage": "India (Maharashtra, Madhya Pradesh, Punjab, Karnataka)",
+      "validationStatus": "EXPERT_VERIFIED"
+    },
+    {
+      "name": "Digital Green Produce Visual Condition Dataset",
+      "source": "Digital Green Agricultural Consortium",
+      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+      "version": "1.4.2",
+      "downloadDate": "2026-04-20",
+      "cropClasses": ["Onion", "Tomato", "Chilli", "Brinjal", "Garlic", "Ginger"],
+      "annotationCount": 29400,
+      "imageCount": 18200,
+      "geographicalCoverage": "Western and Central India",
+      "validationStatus": "EXPERT_VERIFIED"
+    },
+    {
+      "name": "Maharashtra APMC Post-Harvest Quality Corpus",
+      "source": "Maharashtra State Agricultural Marketing Board (MSAMB)",
+      "license": "Public Domain / Open APMC Data Portal",
+      "version": "2025.1",
+      "downloadDate": "2026-05-10",
+      "cropClasses": ["Red Onion", "White Onion", "Table Grapes", "Pomegranate", "Banana", "Turmeric"],
+      "annotationCount": 35000,
+      "imageCount": 24000,
+      "geographicalCoverage": "Maharashtra (Nashik, Pune, Solapur, Sangli, Jalgaon)",
+      "validationStatus": "EXPERT_VERIFIED"
+    }
+  ],
+  "updatePipelineStage": {
+    "step1": "Dataset Source Ingestion",
+    "step2": "Download & Format Validation",
+    "step3": "Duplicate Detection & Hash Checking",
+    "step4": "Image Quality & Blur Filter",
+    "step5": "Agronomic Label Validation",
+    "step6": "Expert Review & Approval",
+    "step7": "Dataset Version Tagging",
+    "step8": "Transfer Learning Model Training (MobileNetV3 / EfficientNet)",
+    "step9": "Evaluation against Holdout Test Set",
+    "step10": "Model Version Registration & Guardrail Approval"
+  }
+}

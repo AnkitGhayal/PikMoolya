@@ -14,6 +14,12 @@ export class OfferActionDto {
   counterPricePerUnit?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  quantity?: number;
+
+  @IsOptional()
   @IsString()
   message?: string;
 }

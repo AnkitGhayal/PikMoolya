@@ -12,6 +12,9 @@ import { OfferActionDto } from './dto/offer-action.dto.js';
 import { ProduceListing } from '../produce/entities/produce-listing.entity.js';
 import { NegotiationsService } from '../negotiations/negotiations.service.js';
 import { Negotiation } from '../negotiations/entities/negotiation.entity.js';
+import { OrdersService } from '../orders/orders.service.js';
+import { LogisticsService } from '../logistics/logistics.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 @Injectable()
 export class OffersService {
@@ -26,6 +29,9 @@ export class OffersService {
     private readonly negotiationRepository: Repository<Negotiation>,
 
     private readonly negotiationsService: NegotiationsService,
+    private readonly ordersService: OrdersService,
+    private readonly logisticsService: LogisticsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createOffer(
@@ -109,6 +115,28 @@ export class OffersService {
             : null,
         }),
       );
+
+    const cropName = listing.crop?.name || 'Produce';
+
+    // Notify Farmer
+    await this.notificationsService.createNotification({
+      userId: listing.farmerId,
+      role: 'FARMER',
+      title: 'New Offer Received',
+      body: `A buyer offered ₹${savedOffer.offeredPricePerUnit}/unit for ${savedOffer.quantity} ${listing.unit} of ${cropName}.`,
+      type: 'OFFER_RECEIVED',
+      referenceId: savedOffer.id,
+    });
+
+    // Notify Buyer
+    await this.notificationsService.createNotification({
+      userId: buyerId,
+      role: 'BUYER',
+      title: '✓ Offer Sent Successfully',
+      body: `Your offer of ₹${savedOffer.offeredPricePerUnit}/unit for ${cropName} has been sent to the farmer.`,
+      type: 'OFFER_SENT',
+      referenceId: savedOffer.id,
+    });
 
     return {
       offer: savedOffer,
@@ -210,9 +238,40 @@ export class OffersService {
     };
   }
 
-  async getBuyerOffers(
-    buyerId: string,
-  ) {
+  async getFarmerOffers(farmerId: string) {
+    const listings = await this.listingRepository.find({
+      where: { farmerId },
+    });
+
+    const listingIds = listings.map((l) => l.id);
+
+    if (listingIds.length === 0) {
+      return { farmerId, offers: [], offerCount: 0 };
+    }
+
+    const offers = await this.offerRepository
+      .createQueryBuilder('offer')
+      .where('offer.listing_id IN (:...listingIds)', { listingIds })
+      .orderBy('offer.created_at', 'DESC')
+      .getMany();
+
+    const result = offers.map((offer) => {
+      const listing = listings.find((l) => l.id === offer.listingId);
+      return {
+        ...offer,
+        cropName: listing?.crop?.name || 'Produce',
+        unit: listing?.unit || 'kg',
+      };
+    });
+
+    return {
+      farmerId,
+      offers: result,
+      offerCount: result.length,
+    };
+  }
+
+  async getBuyerOffers(buyerId: string) {
     const offers =
       await this.offerRepository.find({
         where: {
@@ -231,152 +290,239 @@ export class OffersService {
   }
 
   async acceptOffer(
-    farmerId: string,
+    userId: string,
     offerId: string,
   ) {
-    const offer =
-      await this.findFarmerOffer(
-        farmerId,
-        offerId,
-      );
+    const offer = await this.offerRepository.findOne({
+      where: { id: offerId },
+    });
+
+    if (!offer) {
+      throw new NotFoundException('Offer not found');
+    }
+
+    const listing = await this.listingRepository.findOne({
+      where: { id: offer.listingId },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Produce listing not found');
+    }
+
+    if (listing.farmerId !== userId && offer.buyerId !== userId) {
+      throw new BadRequestException('You are not authorized to accept this offer');
+    }
 
     if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
-      throw new BadRequestException('Only active offers can be accepted');
+      throw new BadRequestException('Only active or countered offers can be accepted');
     }
 
     offer.status = 'ACCEPTED';
-
     const saved = await this.offerRepository.save(offer);
-    await this.negotiationRepository.save(this.negotiationRepository.create({ offerId: offer.id, actorUserId: farmerId, action: 'ACCEPT', pricePerUnit: Number(offer.offeredPricePerUnit), message: 'Offer accepted by farmer.', aiSuggested: false }));
+
+    await this.negotiationRepository.save(
+      this.negotiationRepository.create({
+        offerId: offer.id,
+        actorUserId: userId,
+        action: 'ACCEPT',
+        pricePerUnit: Number(offer.offeredPricePerUnit),
+        message: 'Offer accepted.',
+        aiSuggested: false,
+      }),
+    );
+
+    // Automatically create Order
+    let createdOrderResult: any = null;
+    let logisticsRequest: any = null;
+
+    try {
+      createdOrderResult = await this.ordersService.createFromAcceptedOffer(userId, offer.id);
+      if (createdOrderResult?.order) {
+        logisticsRequest = await this.logisticsService.createForOrder(
+          createdOrderResult.order,
+          listing.crop?.name || 'Produce',
+          listing.unit || 'kg',
+        );
+      }
+    } catch (e) {
+      // Ignore if order already exists
+    }
+
+    const cropName = listing.crop?.name || 'Produce';
+
+    // Notify Farmer & Buyer
+    await this.notificationsService.createNotification({
+      userId: listing.farmerId,
+      role: 'FARMER',
+      title: '✓ Offer Confirmed & Order Created',
+      body: `Offer of ₹${offer.offeredPricePerUnit}/unit for ${cropName} was accepted. Order created and delivery requested.`,
+      type: 'OFFER_ACCEPTED',
+      referenceId: offer.id,
+    });
+
+    await this.notificationsService.createNotification({
+      userId: offer.buyerId,
+      role: 'BUYER',
+      title: '✓ Counter Offer Accepted & Order Created',
+      body: `Your transaction for ${cropName} at ₹${offer.offeredPricePerUnit}/unit is confirmed. Order created and delivery requested.`,
+      type: 'OFFER_ACCEPTED',
+      referenceId: offer.id,
+    });
 
     return {
       offer: saved,
+      order: createdOrderResult?.order ?? null,
+      logisticsRequest: logisticsRequest ?? null,
       action: 'ACCEPTED',
-      message:
-        'Offer accepted. The transaction can now proceed to order creation.',
+      message: '✓ Offer accepted successfully. Order creation and logistics request initiated.',
     };
   }
 
   async rejectOffer(
-    farmerId: string,
+    userId: string,
     offerId: string,
   ) {
-    const offer =
-      await this.findFarmerOffer(
-        farmerId,
-        offerId,
-      );
+    const offer = await this.offerRepository.findOne({
+      where: { id: offerId },
+    });
+
+    if (!offer) {
+      throw new NotFoundException('Offer not found');
+    }
 
     if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
       throw new BadRequestException('Only active offers can be rejected');
     }
 
     offer.status = 'REJECTED';
-
     const saved = await this.offerRepository.save(offer);
-    await this.negotiationRepository.save(this.negotiationRepository.create({ offerId: offer.id, actorUserId: farmerId, action: 'REJECT', pricePerUnit: Number(offer.offeredPricePerUnit), message: 'Offer rejected by farmer.', aiSuggested: false }));
+
+    await this.negotiationRepository.save(
+      this.negotiationRepository.create({
+        offerId: offer.id,
+        actorUserId: userId,
+        action: 'REJECT',
+        pricePerUnit: Number(offer.offeredPricePerUnit),
+        message: 'Offer rejected.',
+        aiSuggested: false,
+      }),
+    );
+
+    const listing = await this.listingRepository.findOne({ where: { id: offer.listingId } });
+    const otherUserId = listing?.farmerId === userId ? offer.buyerId : listing?.farmerId;
+
+    if (otherUserId) {
+      await this.notificationsService.createNotification({
+        userId: otherUserId,
+        title: 'Offer Declined',
+        body: `The offer of ₹${offer.offeredPricePerUnit}/unit was declined.`,
+        type: 'OFFER_REJECTED',
+        referenceId: offer.id,
+      });
+    }
 
     return {
       offer: saved,
       action: 'REJECTED',
-      message:
-        'Offer rejected by the farmer.',
+      message: 'Offer rejected.',
     };
   }
 
   async counterOffer(
-    farmerId: string,
+    userId: string,
     offerId: string,
     dto: OfferActionDto,
   ) {
-    if (
-      dto.counterPricePerUnit === undefined
-    ) {
+    if (dto.counterPricePerUnit === undefined) {
       throw new BadRequestException(
         'counterPricePerUnit is required for a counter offer',
       );
     }
 
-    const offer =
-      await this.findFarmerOffer(
-        farmerId,
-        offerId,
-      );
+    const offer = await this.offerRepository.findOne({
+      where: { id: offerId },
+    });
+
+    if (!offer) {
+      throw new NotFoundException('Offer not found');
+    }
 
     if (!['PENDING', 'COUNTERED'].includes(offer.status)) {
       throw new BadRequestException('Only active offers can be countered');
     }
 
-    const counterPrice =
-      Number(dto.counterPricePerUnit);
+    const counterPrice = Number(dto.counterPricePerUnit);
 
     offer.offeredPricePerUnit = counterPrice;
-    offer.quantity = dto.quantity !== undefined ? Number(dto.quantity) : offer.quantity;
+    if (dto.quantity !== undefined) {
+      offer.quantity = Number(dto.quantity);
+    }
 
-    offer.effectiveNetPerUnit =
-      Number(
-        (
-          counterPrice -
-          Number(
-            offer.transportCostPerUnit ?? 0,
-          ) -
-          Number(
-            offer.platformFeePerUnit ?? 0,
-          ) -
-          Number(
-            offer.estimatedRiskCostPerUnit ?? 0,
-          )
-        ).toFixed(2),
-      );
+    offer.effectiveNetPerUnit = Number(
+      (
+        counterPrice -
+        Number(offer.transportCostPerUnit ?? 0) -
+        Number(offer.platformFeePerUnit ?? 0) -
+        Number(offer.estimatedRiskCostPerUnit ?? 0)
+      ).toFixed(2),
+    );
 
     offer.status = 'COUNTERED';
-
     const saved = await this.offerRepository.save(offer);
-    await this.negotiationRepository.save(this.negotiationRepository.create({ offerId: offer.id, actorUserId: farmerId, action: 'COUNTER', pricePerUnit: counterPrice, message: dto.message ?? 'Farmer submitted a counter offer.', aiSuggested: false }));
+
+    await this.negotiationRepository.save(
+      this.negotiationRepository.create({
+        offerId: offer.id,
+        actorUserId: userId,
+        action: 'COUNTER',
+        pricePerUnit: counterPrice,
+        message: dto.message ?? 'Counter offer submitted.',
+        aiSuggested: false,
+      }),
+    );
+
+    const listing = await this.listingRepository.findOne({ where: { id: offer.listingId } });
+    const isFarmer = listing?.farmerId === userId;
+    const recipientId = isFarmer ? offer.buyerId : listing?.farmerId;
+
+    if (recipientId) {
+      await this.notificationsService.createNotification({
+        userId: recipientId,
+        role: isFarmer ? 'BUYER' : 'FARMER',
+        title: 'Counter Offer Received',
+        body: `${isFarmer ? 'Farmer' : 'Buyer'} responded with a counter offer of ₹${counterPrice}/unit.`,
+        type: 'COUNTER_OFFER',
+        referenceId: offer.id,
+      });
+    }
 
     return {
       offer: saved,
       action: 'COUNTERED',
       counterPricePerUnit: counterPrice,
-      message:
-        dto.message ??
-        'Farmer has submitted a counter offer.',
-      disclaimer:
-        'The counter offer is a negotiation action, not a guaranteed transaction.',
+      message: '✓ Counter offer sent successfully. Other party has been notified.',
     };
   }
 
-  private async findFarmerOffer(
-    farmerId: string,
-    offerId: string,
-  ) {
-    const offer =
-      await this.offerRepository.findOne({
-        where: {
-          id: offerId,
-        },
-      });
+  async withdrawOffer(buyerId: string, offerId: string) {
+    const offer = await this.offerRepository.findOne({
+      where: { id: offerId, buyerId },
+    });
 
     if (!offer) {
-      throw new NotFoundException(
-        'Offer not found',
-      );
+      throw new NotFoundException('Offer not found or unauthorized');
     }
 
-    const listing =
-      await this.listingRepository.findOne({
-        where: {
-          id: offer.listingId,
-          farmerId,
-        },
-      });
-
-    if (!listing) {
-      throw new NotFoundException(
-        'Offer does not belong to this farmer',
-      );
+    if (offer.status !== 'PENDING') {
+      throw new BadRequestException('Only pending offers can be withdrawn');
     }
 
-    return offer;
+    offer.status = 'CANCELLED';
+    const saved = await this.offerRepository.save(offer);
+
+    return {
+      offer: saved,
+      message: '✓ Offer withdrawn successfully.',
+    };
   }
 }

@@ -1,4 +1,4 @@
-﻿import {
+import {
   Column,
   CreateDateColumn,
   Entity,
@@ -13,6 +13,7 @@ import { Crop } from '../../crops/entities/crop.entity.js';
 export enum ProduceListingStatus {
   DRAFT = 'DRAFT',
   PUBLISHED = 'PUBLISHED',
+  PARTIALLY_SOLD = 'PARTIALLY_SOLD',
   SOLD = 'SOLD',
   CANCELLED = 'CANCELLED',
   EXPIRED = 'EXPIRED',
@@ -39,8 +40,71 @@ export class ProduceListing {
   @Column({ type: 'numeric', precision: 14, scale: 3 })
   quantity!: number;
 
+  @Column({ name: 'total_available_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true })
+  totalAvailableQuantity!: number | null;
+
+  @Column({ name: 'remaining_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true })
+  remainingQuantity!: number | null;
+
+  @Column({ name: 'sold_quantity', type: 'numeric', precision: 14, scale: 3, default: 0 })
+  soldQuantity!: number;
+
+  @Column({ name: 'reserved_quantity', type: 'numeric', precision: 14, scale: 3, default: 0 })
+  reservedQuantity!: number;
+
+  @Column({ name: 'min_buyer_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true })
+  minBuyerQuantity!: number | null;
+
+  @Column({ name: 'number_of_bags', type: 'int', nullable: true })
+  numberOfBags!: number | null;
+
+  @Column({ name: 'avg_bag_weight', type: 'numeric', precision: 14, scale: 3, nullable: true })
+  avgBagWeight!: number | null;
+
+  @Column({ name: 'measured_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true })
+  measuredQuantity!: number | null;
+
+  @Column({ name: 'measurement_method', type: 'varchar', length: 60, nullable: true })
+  measurementMethod!: string | null;
+
+  @Column({ name: 'measurement_timestamp', type: 'timestamptz', nullable: true })
+  measurementTimestamp!: Date | null;
+
+  @Column({ name: 'measurement_source', type: 'varchar', length: 120, nullable: true })
+  measurementSource!: string | null;
+
+  @Column({ name: 'device_info', type: 'jsonb', nullable: true })
+  deviceInfo!: Record<string, any> | null;
+
   @Column({ type: 'varchar', length: 40, default: 'quintal' })
   unit!: string;
+
+  @Column({ name: 'expected_price', type: 'numeric', precision: 14, scale: 2, nullable: true })
+  expectedPrice!: number | null;
+
+  @Column({ name: 'min_acceptable_price', type: 'numeric', precision: 14, scale: 2, nullable: true })
+  minAcceptablePrice!: number | null;
+
+  @Column({ name: 'negotiation_preference', type: 'varchar', length: 60, nullable: true })
+  negotiationPreference!: string | null;
+
+  @Column({ name: 'delivery_preference', type: 'varchar', length: 120, nullable: true })
+  deliveryPreference!: string | null;
+
+  @Column({ name: 'listing_visibility', type: 'varchar', length: 40, default: 'PUBLIC' })
+  listingVisibility!: string;
+
+  @Column({ name: 'quality_description', type: 'text', nullable: true })
+  qualityDescription!: string | null;
+
+  @Column({ name: 'visible_condition', type: 'varchar', length: 120, nullable: true })
+  visibleCondition!: string | null;
+
+  @Column({ name: 'storage_info', type: 'text', nullable: true })
+  storageInfo!: string | null;
+
+  @Column({ name: 'location_approximate', type: 'varchar', length: 255, nullable: true })
+  locationApproximate!: string | null;
 
   @Column({ name: 'harvest_date', type: 'date', nullable: true })
   harvestDate!: string | null;

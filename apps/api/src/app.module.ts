@@ -34,10 +34,23 @@ import { BuyerDashboardModule } from './buyer-dashboard/buyer-dashboard.module.j
 import { OffersModule } from './offers/offers.module.js';
 import { OrdersModule } from './orders/orders.module.js';
 import { QualityChainModule } from './quality-chain/quality-chain.module.js';
+import { AiModule } from './ai/ai.module.js';
+import { ProductsModule } from './products/products.module.js';
+import { CertificatesModule } from './certificates/certificates.module.js';
+import { Certificate } from './certificates/entities/certificate.entity.js';
 
 import { Order } from './orders/entities/order.entity.js';
 import { Offer } from './offers/entities/offer.entity.js';
 import { ProducePassport } from './produce-passports/entities/produce-passport.entity.js';
+
+import { LogisticsRequest } from './logistics/entities/logistics-request.entity.js';
+import { Notification } from './notifications/entities/notification.entity.js';
+import { Message } from './messages/entities/message.entity.js';
+
+import { LogisticsModule } from './logistics/logistics.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
+import { MessagesModule } from './messages/messages.module.js';
+import { AdminModule } from './admin/admin.module.js';
 
 @Module({
   imports: [
@@ -69,6 +82,10 @@ import { ProducePassport } from './produce-passports/entities/produce-passport.e
           ProducePassport,
           MarketPrice,
           PricePrediction,
+          Certificate,
+          LogisticsRequest,
+          Notification,
+          Message,
         ],
 
         synchronize: false,
@@ -92,14 +109,16 @@ import { ProducePassport } from './produce-passports/entities/produce-passport.e
     OffersModule,
     OrdersModule,
     QualityChainModule,
+    AiModule,
+    ProductsModule,
+    CertificatesModule,
+    LogisticsModule,
+    NotificationsModule,
+    MessagesModule,
+    AdminModule,
   ],
 
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
-
-
-
-
-

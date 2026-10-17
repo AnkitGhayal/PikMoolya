@@ -1,0 +1,26 @@
+<svg width="440" height="110" viewBox="0 0 440 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(10, 10) scale(0.17578)">
+    <rect width="512" height="512" rx="112" fill="#F4FBF5"/>
+    <path d="M 180 370 V 160 C 180 148.954 188.954 140 200 140 H 250 C 294.183 140 330 175.817 330 220 C 330 264.183 294.183 300 250 300 H 224 V 370 C 224 381.046 215.046 390 204 390 H 200 C 188.954 390 180 381.046 180 370 Z" fill="url(#l_green_grad)"/>
+    <path d="M 224 184 H 250 C 269.882 184 286 200.118 286 220 C 286 239.882 269.882 256 250 256 H 224 V 184 Z" fill="#FFFFFF"/>
+    <path d="M 250 140 C 250 140 330 90 375 135 C 420 180 365 245 365 245 C 365 245 330 200 288 190 C 255 182 250 140 250 140 Z" fill="url(#l_leaf_grad)"/>
+    <circle cx="250" cy="220" r="16" fill="url(#l_gold_grad)"/>
+  </g>
+  <text x="115" y="65" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="900" letter-spacing="-0.8">
+    <tspan fill="#1B5E20">Pik</tspan><tspan fill="#1E293B">M</tspan><tspan fill="#1E293B">oolya</tspan>
+  </text>
+  <circle cx="174" cy="35" r="5" fill="#F59E0B"/>
+  <path d="M 190 72 C 208 76 228 76 245 72" stroke="#F59E0B" stroke-width="3.5" stroke-linecap="round"/>
+  <text x="116" y="87" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="#64748B" letter-spacing="1.5">FAIR PRICE • DIRECT MARKET</text>
+  <defs>
+    <linearGradient id="l_green_grad" x1="180" y1="140" x2="330" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1B5E20"/><stop offset="100%" stop-color="#2E7D32"/>
+    </linearGradient>
+    <linearGradient id="l_leaf_grad" x1="250" y1="90" x2="375" y2="245" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399"/><stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="l_gold_grad" x1="230" y1="200" x2="270" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+</svg>

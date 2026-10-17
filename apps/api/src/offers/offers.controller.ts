@@ -25,10 +25,17 @@ export class OffersController {
     @Req() request: any,
     @Body() dto: CreateOfferDto,
   ) {
+    const userId = request.user?.userId || request.user?.id;
     return this.offersService.createOffer(
-      request.user.userId,
+      userId,
       dto,
     );
+  }
+
+  @Get('farmer/all')
+  getFarmerOffers(@Req() request: any) {
+    const userId = request.user?.userId || request.user?.id;
+    return this.offersService.getFarmerOffers(userId);
   }
 
   @Get('listing/:listingId')
@@ -36,17 +43,17 @@ export class OffersController {
     @Req() request: any,
     @Param('listingId') listingId: string,
   ) {
+    const userId = request.user?.userId || request.user?.id;
     return this.offersService.getListingOffers(
       listingId,
-      request.user.userId,
+      userId,
     );
   }
 
   @Get('my')
   getMyOffers(@Req() request: any) {
-    return this.offersService.getBuyerOffers(
-      request.user.userId,
-    );
+    const userId = request.user?.userId || request.user?.id;
+    return this.offersService.getBuyerOffers(userId);
   }
 
   @Post(':id/accept')
@@ -54,8 +61,9 @@ export class OffersController {
     @Req() request: any,
     @Param('id') offerId: string,
   ) {
+    const userId = request.user?.userId || request.user?.id;
     return this.offersService.acceptOffer(
-      request.user.userId,
+      userId,
       offerId,
     );
   }
@@ -65,8 +73,9 @@ export class OffersController {
     @Req() request: any,
     @Param('id') offerId: string,
   ) {
+    const userId = request.user?.userId || request.user?.id;
     return this.offersService.rejectOffer(
-      request.user.userId,
+      userId,
       offerId,
     );
   }
@@ -77,10 +86,23 @@ export class OffersController {
     @Param('id') offerId: string,
     @Body() dto: OfferActionDto,
   ) {
+    const userId = request.user?.userId || request.user?.id;
     return this.offersService.counterOffer(
-      request.user.userId,
+      userId,
       offerId,
       dto,
+    );
+  }
+
+  @Post(':id/withdraw')
+  withdraw(
+    @Req() request: any,
+    @Param('id') offerId: string,
+  ) {
+    const userId = request.user?.userId || request.user?.id;
+    return this.offersService.withdrawOffer(
+      userId,
+      offerId,
     );
   }
 }

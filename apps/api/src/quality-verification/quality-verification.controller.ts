@@ -17,6 +17,11 @@ export class QualityVerificationController {
     private readonly qualityVerificationService: QualityVerificationService,
   ) {}
 
+  @Post('capture-session')
+  createCaptureSession() {
+    return this.qualityVerificationService.createCaptureSession();
+  }
+
   @Post('assess')
   assess(
     @Req() request: any,

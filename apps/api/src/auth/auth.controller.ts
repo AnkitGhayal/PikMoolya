@@ -39,6 +39,15 @@ export class AuthController {
     };
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  getProfile(@Req() request: any) {
+    return {
+      message: 'JWT profile retrieved successfully',
+      user: request.user,
+    };
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.FARMER)
   @Get('test-farmer')

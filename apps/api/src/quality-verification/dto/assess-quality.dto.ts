@@ -8,8 +8,25 @@ import {
 } from 'class-validator';
 
 export class AssessQualityDto {
+  @IsOptional()
   @IsUUID()
-  listingId: string;
+  listingId?: string;
+
+  @IsOptional()
+  @IsString()
+  imageBase64?: string;
+
+  @IsOptional()
+  @IsString()
+  imageType?: string;
+
+  @IsOptional()
+  @IsString()
+  cropName?: string;
+
+  @IsOptional()
+  @IsString()
+  variety?: string;
 
   @IsOptional()
   @IsNumber()
@@ -50,4 +67,20 @@ export class AssessQualityDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  captureSessionId?: string;
+
+  @IsOptional()
+  @IsString()
+  captureMethod?: 'CAMERA' | 'GALLERY';
+
+  @IsOptional()
+  @IsString()
+  capturedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  exifCaptureDate?: string;
 }

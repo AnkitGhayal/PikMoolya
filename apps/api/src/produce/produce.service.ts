@@ -96,34 +96,66 @@ export class ProduceService {
 
     await this.validateCrop(dto.cropId);
 
+    const totalAvailable = Number(dto.totalAvailableQuantity ?? dto.quantity);
+    const quantityToSell = Number(dto.quantity);
+    const minBuyerQty = dto.minBuyerQuantity ? Number(dto.minBuyerQuantity) : undefined;
+
+    if (quantityToSell > totalAvailable) {
+      throw new ConflictException(
+        'Quantity to sell cannot exceed total available quantity',
+      );
+    }
+
+    if (minBuyerQty && minBuyerQty > quantityToSell) {
+      throw new ConflictException(
+        'Minimum buyer quantity cannot exceed quantity for sale',
+      );
+    }
+
+    const remainingQty = totalAvailable - quantityToSell;
+
     const listing = this.produceRepository.create({
       farmerId: farmer.id,
       cropId: dto.cropId,
       farmId: dto.farmId ?? null,
-      quantity: dto.quantity,
+      quantity: quantityToSell,
+      totalAvailableQuantity: totalAvailable,
+      remainingQuantity: remainingQty,
+      soldQuantity: 0,
+      reservedQuantity: 0,
+      minBuyerQuantity: minBuyerQty ?? null,
+      numberOfBags: dto.numberOfBags ?? null,
+      avgBagWeight: dto.avgBagWeight ?? null,
+      measuredQuantity: dto.measuredQuantity ?? null,
+      measurementMethod: dto.measurementMethod ?? 'Estimated quantity',
+      measurementTimestamp: dto.measurementTimestamp ? new Date(dto.measurementTimestamp) : new Date(),
+      measurementSource: dto.measurementSource ?? 'Farmer input',
+      deviceInfo: dto.deviceInfo ?? null,
       unit: dto.unit ?? 'quintal',
+      expectedPrice: dto.expectedPrice ?? null,
+      minAcceptablePrice: dto.minAcceptablePrice ?? null,
+      negotiationPreference: dto.negotiationPreference ?? 'Negotiation allowed',
+      deliveryPreference: dto.deliveryPreference ?? null,
+      listingVisibility: dto.listingVisibility ?? 'PUBLIC',
+      qualityDescription: dto.qualityDescription ?? null,
+      visibleCondition: dto.visibleCondition ?? null,
+      storageInfo: dto.storageInfo ?? null,
+      locationApproximate: dto.locationApproximate ?? (dto.locationName ? `${dto.locationName} district` : 'Pune district'),
       harvestDate: dto.harvestDate ?? null,
       locationName: dto.locationName ?? null,
       latitude: dto.latitude ?? null,
       longitude: dto.longitude ?? null,
-      productionCostPerUnit:
-        dto.productionCostPerUnit ?? null,
-      transportCostPerUnit:
-        dto.transportCostPerUnit ?? null,
-      storageCostPerUnit:
-        dto.storageCostPerUnit ?? null,
-      packagingCostPerUnit:
-        dto.packagingCostPerUnit ?? null,
-      otherCostPerUnit:
-        dto.otherCostPerUnit ?? null,
-      desiredMinReturnPerUnit:
-        dto.desiredMinReturnPerUnit ?? null,
+      productionCostPerUnit: dto.productionCostPerUnit ?? null,
+      transportCostPerUnit: dto.transportCostPerUnit ?? null,
+      storageCostPerUnit: dto.storageCostPerUnit ?? null,
+      packagingCostPerUnit: dto.packagingCostPerUnit ?? null,
+      otherCostPerUnit: dto.otherCostPerUnit ?? null,
+      desiredMinReturnPerUnit: dto.desiredMinReturnPerUnit ?? null,
       status: ProduceListingStatus.DRAFT,
       publishedAt: null,
     });
 
-    const savedListing =
-      await this.produceRepository.save(listing);
+    const savedListing = await this.produceRepository.save(listing);
 
     return {
       message: 'Produce listing created successfully',
