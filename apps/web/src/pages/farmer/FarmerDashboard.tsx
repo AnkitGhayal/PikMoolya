@@ -1,10 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { useLanguage } from '../../context/LanguageContext';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
-import { Package, TrendingUp, Award, ShoppingCart, PlusCircle } from 'lucide-react';
+import {
+  Package,
+  TrendingUp,
+  Award,
+  ShoppingCart,
+  PlusCircle,
+  ArrowRight,
+  Sparkles,
+  MapPin,
+  Scale,
+  CheckCircle2,
+  Calendar,
+} from 'lucide-react';
 
 export const FarmerDashboard: React.FC = () => {
+  const { t } = useLanguage();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -15,86 +29,275 @@ export const FarmerDashboard: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <LoadingSpinner message="Loading Farmer Dashboard..." />;
+  if (loading) return <LoadingSpinner message={t('loading')} />;
 
   const listings = data?.produce?.activeListings || data?.produce?.listings || [];
 
   return (
-    <div className="page-container">
-      <div className="flex-between mb-4">
+    <div className="page-container animate-fade-in">
+      {/* Top Header */}
+      <div className="flex-between mb-6" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#1B5E20' }}>Farmer Dashboard</h1>
-          <p style={{ fontSize: '13px', color: '#718096' }}>Manage listings, AI price discovery & orders</p>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {t('roleFarmer')}
+          </span>
+          <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+            {t('farmerDashboardTitle')}
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+            {t('farmerDashboardSubtitle')}
+          </p>
         </div>
-        <Link to="/farmer/products/add" className="btn-primary">
-          <PlusCircle size={16} /> Add New Produce
-        </Link>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid-4" style={{ marginBottom: '24px' }}>
-        <div className="card" style={{ padding: '16px' }}>
-          <span style={{ fontSize: '12px', color: '#718096' }}>Active Listings</span>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#1B5E20', marginTop: '4px' }}>{listings.length}</div>
-        </div>
-        <div className="card" style={{ padding: '16px' }}>
-          <span style={{ fontSize: '12px', color: '#718096' }}>AI Quality Proofs</span>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#2B6CB0', marginTop: '4px' }}>{listings.length}</div>
-        </div>
-        <div className="card" style={{ padding: '16px' }}>
-          <span style={{ fontSize: '12px', color: '#718096' }}>Pending Orders</span>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#DD6B20', marginTop: '4px' }}>1</div>
-        </div>
-        <div className="card" style={{ padding: '16px' }}>
-          <span style={{ fontSize: '12px', color: '#718096' }}>Fair Price Index</span>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#22543D', marginTop: '4px' }}>Live</div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Link to="/farmer/prediction" className="btn-secondary">
+            <TrendingUp size={16} color="var(--primary)" /> {t('sidebarPriceDiscovery')}
+          </Link>
+          <Link to="/farmer/products/add" className="btn-primary">
+            <PlusCircle size={16} /> {t('addNewListing')}
+          </Link>
         </div>
       </div>
 
-      {/* Shortcuts */}
-      <div className="grid-2" style={{ marginBottom: '24px' }}>
-        <Link to="/farmer/prediction" className="card" style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#E8F5E9', border: '1px solid #C8E6C9' }}>
-          <TrendingUp size={32} color="#1B5E20" />
+      {/* Summary Stat Cards */}
+      <div className="grid-4 mb-6">
+        <div className="stat-card">
           <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1B5E20' }}>AI Fair Price Calculator</h3>
-            <p style={{ fontSize: '12px', color: '#2E7D32' }}>Calculate benchmark prices before selling</p>
+            <div className="stat-label">{t('activeProductsCard')}</div>
+            <div className="stat-value">{listings.length}</div>
+            <div className="stat-trend stat-trend-up">
+              <CheckCircle2 size={13} /> {t('activeListings')}
+            </div>
           </div>
+          <div className="stat-icon-wrapper stat-icon-green">
+            <Package size={22} />
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div>
+            <div className="stat-label">AI Quality Proofs</div>
+            <div className="stat-value">{listings.length}</div>
+            <div className="stat-trend" style={{ color: 'var(--ai-blue)' }}>
+              <Award size={13} /> MobileNetV3 Graded
+            </div>
+          </div>
+          <div className="stat-icon-wrapper stat-icon-blue">
+            <Award size={22} />
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div>
+            <div className="stat-label">Pending Orders</div>
+            <div className="stat-value">1</div>
+            <div className="stat-trend" style={{ color: 'var(--accent)' }}>
+              <ShoppingCart size={13} /> Awaiting fulfillment
+            </div>
+          </div>
+          <div className="stat-icon-wrapper stat-icon-amber">
+            <ShoppingCart size={22} />
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div>
+            <div className="stat-label">APMC Price Index</div>
+            <div className="stat-value" style={{ color: 'var(--primary)' }}>Live</div>
+            <div className="stat-trend stat-trend-up">
+              <TrendingUp size={13} /> MSAMB Calibrated
+            </div>
+          </div>
+          <div className="stat-icon-wrapper stat-icon-green">
+            <Scale size={22} />
+          </div>
+        </div>
+      </div>
+
+      {/* Action Banners */}
+      <div className="grid-2 mb-6">
+        <Link
+          to="/farmer/prediction"
+          className="card card-interactive"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '20px',
+            background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+            border: '1px solid var(--primary-border)',
+            padding: '24px',
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: '#ffffff',
+              color: 'var(--primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: 'var(--shadow-sm)',
+              flexShrink: 0,
+            }}
+          >
+            <TrendingUp size={28} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--primary-dark)', marginBottom: '4px' }}>
+              AI Fair Price Calculator
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--primary-hover)', lineHeight: 1.5 }}>
+              Compute fair value benchmark using the 5-factor equation Pf = f(C, L, Q, M, H) before quoting.
+            </p>
+          </div>
+          <ArrowRight size={20} color="var(--primary)" style={{ marginLeft: 'auto', flexShrink: 0 }} />
         </Link>
 
-        <Link to="/farmer/quality" className="card" style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#EBF8FF', border: '1px solid #BEE3F8' }}>
-          <Award size={32} color="#2B6CB0" />
-          <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#2B6CB0' }}>Upload Crop Photo for Quality Assessment</h3>
-            <p style={{ fontSize: '12px', color: '#2C5282' }}>Generate Grade A/B/C computer vision reports</p>
+        <Link
+          to="/farmer/quality"
+          className="card card-interactive"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '20px',
+            background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+            border: '1px solid var(--ai-blue-border)',
+            padding: '24px',
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: '#ffffff',
+              color: 'var(--ai-blue)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: 'var(--shadow-sm)',
+              flexShrink: 0,
+            }}
+          >
+            <Award size={28} />
           </div>
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1e40af', marginBottom: '4px' }}>
+              Computer Vision Quality Proof
+            </h3>
+            <p style={{ fontSize: '13px', color: '#1d4ed8', lineHeight: 1.5 }}>
+              Upload grain photographs to obtain instant Grade A/B/C certification and marketability analysis.
+            </p>
+          </div>
+          <ArrowRight size={20} color="var(--ai-blue)" style={{ marginLeft: 'auto', flexShrink: 0 }} />
         </Link>
       </div>
 
-      {/* Recent Listings */}
-      <div className="card">
-        <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px', color: '#1A202C' }}>My Recent Produce Listings</h3>
+      {/* Recent Produce Listings Table */}
+      <div className="card" style={{ padding: '24px' }}>
+        <div className="flex-between mb-4">
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Recent Produce Inventory
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+              Produce currently published on the direct agricultural marketplace
+            </p>
+          </div>
+          <Link to="/farmer/products" className="btn-secondary btn-sm">
+            View All ({listings.length})
+          </Link>
+        </div>
+
         {listings.length === 0 ? (
-          <p style={{ fontSize: '14px', color: '#718096' }}>No active listings. Click "Add New Produce" to start selling.</p>
+          <div className="text-center" style={{ padding: '48px 16px' }}>
+            <Package size={36} color="var(--text-light)" style={{ marginBottom: '12px' }} />
+            <p style={{ fontSize: '15px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              No active listings yet. Add your first produce to start receiving buyer orders!
+            </p>
+            <Link to="/farmer/products/add" className="btn-primary">
+              <PlusCircle size={16} /> Add First Crop Listing
+            </Link>
+          </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {listings.map((item: any, idx: number) => (
-              <div key={item.id || idx} className="flex-between" style={{ padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                <div>
-                  <strong style={{ fontSize: '15px', color: '#1A202C' }}>{item.crop?.name || 'Crop'} ({item.crop?.variety || 'Standard'})</strong>
-                  <span style={{ fontSize: '12px', color: '#718096', display: 'block', marginTop: '2px' }}>
-                    Available: {item.remainingQuantity ?? item.quantity} {item.unit || 'quintal'} | Location: {item.locationApproximate || 'Pune'}
-                  </span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '15px', fontWeight: 700, color: '#1B5E20' }}>
-                    ₹{(item.expectedPrice || 2500).toLocaleString('en-IN')} /{item.unit || 'quintal'}
-                  </span>
-                  <span className="badge badge-success" style={{ display: 'block', marginTop: '4px' }}>
-                    {item.status || 'PUBLISHED'}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Crop & Variety</th>
+                  <th>Quantity Available</th>
+                  <th>Expected Price</th>
+                  <th>Market Location</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listings.slice(0, 5).map((item: any, idx: number) => (
+                  <tr key={item.id || idx}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: 'var(--radius-sm)',
+                            backgroundColor: 'var(--primary-light)',
+                            color: 'var(--primary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '13px',
+                          }}
+                        >
+                          {item.crop?.name?.[0] || 'C'}
+                        </div>
+                        <div>
+                          <strong style={{ color: 'var(--text-primary)' }}>
+                            {item.crop?.name || 'Produce'}
+                          </strong>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block' }}>
+                            {item.crop?.variety || 'Standard Grade'}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <strong style={{ color: 'var(--text-primary)' }}>
+                        {item.remainingQuantity ?? item.quantity} {item.unit || 'quintal'}
+                      </strong>
+                    </td>
+                    <td>
+                      <strong style={{ color: 'var(--primary-dark)', fontSize: '15px' }}>
+                        ₹{(item.expectedPrice || 2450).toLocaleString('en-IN')}
+                      </strong>{' '}
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>/{item.unit || 'quintal'}</span>
+                    </td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--text-secondary)' }}>
+                        <MapPin size={13} color="var(--text-muted)" /> {item.locationApproximate || 'Pune APMC'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge badge-success">
+                        {item.status || 'PUBLISHED'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <Link
+                        to={`/product/${item.id}`}
+                        className="btn-secondary btn-sm"
+                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                      >
+                        Marketplace View
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

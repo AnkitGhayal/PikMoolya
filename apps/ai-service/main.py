@@ -5,6 +5,7 @@ import os
 import math
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from PIL import Image, ImageStat, ImageFilter
 import numpy as np
@@ -13,6 +14,14 @@ app = FastAPI(
     title="PikMoolya Agricultural AI Computer Vision Service",
     description="Real image-based agronomic visual quality analysis and dataset pipeline engine",
     version="2.4.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "dataset_manifest.json")
@@ -204,4 +213,5 @@ def analyze_quality(req: ImageAnalysisRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

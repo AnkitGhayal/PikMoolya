@@ -7,9 +7,26 @@ import { AppModule } from './app.module.js';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const corsOrigin = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+    : true;
+
   app.enableCors({
-    origin: '*',
+    origin: corsOrigin,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  });
+
+  app.use((req: any, res: any, next: any) => {
+    const start = Date.now();
+    const { method, originalUrl } = req;
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+      console.log(`[HTTP] ${method} ${originalUrl} ${res.statusCode} (${duration}ms) from ${clientIp}`);
+    });
+    next();
   });
 
   app.setGlobalPrefix('api', {

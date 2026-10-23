@@ -1,31 +1,34 @@
 export const theme = {
   colors: {
-    primary: '#2E7D32',       // Rich Agricultural Emerald Green
-    primaryDark: '#1B4D1E',   // Deep Forest Green
-    primaryLight: '#E8F5E9',  // Light Mint Green Background
-    accentGold: '#F59E0B',    // Fair Price Gold Accent
-    accentGoldLight: '#FEF3C7',
+    primary: '#15803D',       // Forest Green (matches web --primary)
+    primaryDark: '#166534',   // Deep Forest Green (matches web --primary-hover)
+    primaryLight: '#F0FDF4',  // Light Mint Green (matches web --primary-light)
+    primaryTint: '#DCFCE7',   // Mint Tint (matches web --primary-tint)
+    primaryBorder: '#BBF7D0', // Mint Border (matches web --primary-border)
+    accentGold: '#D97706',    // Harvest Amber (matches web --accent)
+    accentGoldLight: '#FFFBEB',
+    accentGoldTint: '#FEF3C7',
     
     // Status colors
-    success: '#15803D',
-    successLight: '#DCFCE7',
-    warning: '#B45309',
-    warningLight: '#FEF3C7',
-    error: '#C53030',
-    errorLight: '#FEE2E2',
-    info: '#1E40AF',
-    infoLight: '#DBEAFE',
+    success: '#16A34A',
+    successLight: '#F0FDF4',
+    warning: '#EA580C',
+    warningLight: '#FFF7ED',
+    error: '#DC2626',
+    errorLight: '#FEF2F2',
+    info: '#0284C7',
+    infoLight: '#F0F9FF',
 
     // Neutrals
-    background: '#F4F8F4',
+    background: '#F8FAFC',
     surface: '#FFFFFF',
-    surfaceSubtle: '#F8FAF8',
-    textMain: '#1C2A1E',
-    textMuted: '#5B6B5D',
-    textSubtle: '#8E9D90',
+    surfaceSubtle: '#F1F5F9',
+    textMain: '#0F172A',
+    textMuted: '#334155',
+    textSubtle: '#64748B',
     border: '#E2E8F0',
-    borderLight: '#F0F4F1',
-    divider: '#E8EFE9',
+    borderLight: '#F1F5F9',
+    divider: '#E2E8F0',
 
     gray: {
       50: '#F8FAFC',

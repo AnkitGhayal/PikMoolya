@@ -29,6 +29,13 @@ export class OrdersService {
   async createFromAcceptedOffer(
     userId: string,
     acceptedOfferId: string,
+    options?: {
+      logisticsRequired?: boolean;
+      logisticsCost?: number;
+      logisticsPayer?: string;
+      pickupDetails?: string;
+      deliveryDetails?: string;
+    },
   ) {
     const offer = await this.offerRepository.findOne({
       where: { id: acceptedOfferId },
@@ -52,7 +59,17 @@ export class OrdersService {
       throw new NotFoundException('Produce listing not found');
     }
 
-    if (listing.farmerId !== userId && offer.buyerId !== userId) {
+    const [buyerRow, farmerRow] = await Promise.all([
+      this.dataSource.query('SELECT id FROM buyers WHERE user_id = $1 LIMIT 1', [userId]),
+      this.dataSource.query('SELECT id FROM farmers WHERE user_id = $1 LIMIT 1', [userId]),
+    ]);
+    const bId = buyerRow?.[0]?.id;
+    const fId = farmerRow?.[0]?.id;
+
+    const isFarmer = listing.farmerId === userId || (fId && listing.farmerId === fId);
+    const isBuyer = offer.buyerId === userId || (bId && offer.buyerId === bId);
+
+    if (!isFarmer && !isBuyer) {
       throw new BadRequestException(
         'You are not authorized to create this order',
       );
@@ -103,10 +120,14 @@ export class OrdersService {
       if (newRemainingQty <= 0) {
         listing.status = ProduceListingStatus.SOLD;
       } else {
-        listing.status = ProduceListingStatus.PARTIALLY_SOLD;
+        listing.status = ProduceListingStatus.PUBLISHED;
       }
 
       await queryRunner.manager.save(listing);
+
+      const isLogisticsRequired = Boolean(options?.logisticsRequired);
+      const logisticsCost = isLogisticsRequired ? Number(options?.logisticsCost ?? 1200) : 0;
+      const logisticsStatus = isLogisticsRequired ? 'REQUESTED' : 'NO_LOGISTICS';
 
       const order = this.orderRepository.create({
         listingId: listing.id,
@@ -117,7 +138,13 @@ export class OrdersService {
         agreedPricePerUnit,
         expectedGross,
         expectedNet,
-        status: OrderStatus.PENDING,
+        status: isLogisticsRequired ? OrderStatus.LOGISTICS_REQUESTED : OrderStatus.CONFIRMED,
+        logisticsRequired: isLogisticsRequired,
+        logisticsCost,
+        logisticsPayer: options?.logisticsPayer || 'BUYER',
+        logisticsStatus,
+        pickupDetails: options?.pickupDetails || null,
+        deliveryDetails: options?.deliveryDetails || null,
       });
 
       const savedOrder = await queryRunner.manager.save(order);
@@ -156,14 +183,147 @@ export class OrdersService {
     }
   }
 
+  async createDirectOrder(
+    userId: string,
+    productId: string,
+    quantity: number,
+    price?: number,
+    options?: {
+      logisticsRequired?: boolean;
+      logisticsCost?: number;
+      logisticsPayer?: string;
+      pickupDetails?: string;
+      deliveryDetails?: string;
+    },
+  ) {
+    const listing = await this.listingRepository.findOne({
+      where: { id: productId },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Produce listing not found');
+    }
+
+    const availableForSale = Number(listing.remainingQuantity ?? listing.quantity);
+    if (quantity > availableForSale) {
+      throw new ConflictException(
+        `Insufficient available quantity. Requested ${quantity} ${listing.unit}, but only ${availableForSale} ${listing.unit} is available.`,
+      );
+    }
+
+    const agreedPricePerUnit = price || Number(listing.expectedPrice || 2500);
+    const expectedGross = quantity * agreedPricePerUnit;
+    const expectedNet = expectedGross;
+
+    let buyerId = userId;
+    const buyerRows = await this.dataSource.query(
+      'SELECT id FROM buyers WHERE user_id = $1',
+      [userId],
+    );
+    if (buyerRows && buyerRows.length > 0) {
+      buyerId = buyerRows[0].id;
+    } else {
+      const newBuyer = await this.dataSource.query(
+        'INSERT INTO buyers (user_id, business_name, buyer_type) VALUES ($1, $2, $3) RETURNING id',
+        [userId, 'Trading Partner', 'TRADER'],
+      );
+      buyerId = newBuyer[0].id;
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const newSoldQty = Number(listing.soldQuantity || 0) + quantity;
+      const newRemainingQty = availableForSale - quantity;
+
+      listing.soldQuantity = newSoldQty;
+      listing.remainingQuantity = newRemainingQty;
+
+      if (newRemainingQty <= 0) {
+        listing.status = ProduceListingStatus.SOLD;
+      } else {
+        listing.status = ProduceListingStatus.PUBLISHED;
+      }
+
+      await queryRunner.manager.save(listing);
+
+      const isLogisticsRequired = Boolean(options?.logisticsRequired);
+      const logisticsCost = isLogisticsRequired ? Number(options?.logisticsCost ?? 1200) : 0;
+      const logisticsStatus = isLogisticsRequired ? 'REQUESTED' : 'NO_LOGISTICS';
+
+      const order = this.orderRepository.create({
+        listingId: listing.id,
+        farmerId: listing.farmerId,
+        buyerId: buyerId,
+        acceptedOfferId: null,
+        quantity,
+        agreedPricePerUnit,
+        expectedGross,
+        expectedNet,
+        status: isLogisticsRequired ? OrderStatus.LOGISTICS_REQUESTED : OrderStatus.CONFIRMED,
+        logisticsRequired: isLogisticsRequired,
+        logisticsCost,
+        logisticsPayer: options?.logisticsPayer || 'BUYER',
+        logisticsStatus,
+        pickupDetails: options?.pickupDetails || null,
+        deliveryDetails: options?.deliveryDetails || null,
+      });
+
+      const savedOrder = await queryRunner.manager.save(order);
+      await queryRunner.commitTransaction();
+
+      return {
+        message: 'Order created successfully with inventory deduction',
+        order: savedOrder,
+      };
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   async getMyOrders(userId: string) {
-    return this.orderRepository.find({
-      where: [
-        { farmerId: userId },
-        { buyerId: userId },
-      ],
+    const farmerRows = await this.dataSource.query(
+      'SELECT id FROM farmers WHERE user_id = $1',
+      [userId],
+    );
+    const buyerRows = await this.dataSource.query(
+      'SELECT id FROM buyers WHERE user_id = $1',
+      [userId],
+    );
+    const farmerId = farmerRows?.[0]?.id;
+    const buyerId = buyerRows?.[0]?.id;
+
+    const conditions: any[] = [];
+    if (farmerId) conditions.push({ farmerId });
+    if (buyerId) conditions.push({ buyerId });
+    conditions.push({ farmerId: userId }, { buyerId: userId });
+
+    const orders = await this.orderRepository.find({
+      where: conditions,
       order: { createdAt: 'DESC' },
     });
+
+    const listingIds = [...new Set(orders.map((o) => o.listingId).filter(Boolean))];
+    const listingMap: Record<string, string> = {};
+    if (listingIds.length > 0) {
+      const listings = await this.listingRepository.find({
+        where: listingIds.map((id) => ({ id })),
+        relations: { crop: true },
+      });
+      for (const l of listings) {
+        listingMap[l.id] = l.crop?.name || 'Agricultural Produce';
+      }
+    }
+
+    return orders.map((o) => ({
+      ...o,
+      cropName: listingMap[o.listingId] || 'Agricultural Produce',
+    }));
   }
 
   async getOrder(userId: string, orderId: string) {
@@ -175,13 +335,41 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    if (order.farmerId !== userId && order.buyerId !== userId) {
+    const farmerRows = await this.dataSource.query(
+      'SELECT id FROM farmers WHERE user_id = $1',
+      [userId],
+    );
+    const buyerRows = await this.dataSource.query(
+      'SELECT id FROM buyers WHERE user_id = $1',
+      [userId],
+    );
+    const farmerId = farmerRows?.[0]?.id;
+    const buyerId = buyerRows?.[0]?.id;
+
+    const isAuthorized =
+      order.farmerId === userId ||
+      order.buyerId === userId ||
+      (farmerId && order.farmerId === farmerId) ||
+      (buyerId && order.buyerId === buyerId);
+
+    if (!isAuthorized) {
       throw new BadRequestException(
         'You are not authorized to view this order',
       );
     }
 
-    return order;
+    let listing: ProduceListing | null = null;
+    if (order.listingId) {
+      listing = await this.listingRepository.findOne({
+        where: { id: order.listingId },
+        relations: { crop: true },
+      });
+    }
+
+    return {
+      ...order,
+      listing,
+    };
   }
 
   async updateStatus(

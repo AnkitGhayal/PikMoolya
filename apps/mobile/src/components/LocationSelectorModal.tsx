@@ -93,10 +93,10 @@ export const LocationSelectorModal: React.FC<LocationSelectorModalProps> = ({
                       onClose();
                     }}
                   >
-                    <Ionicons name="location" size={18} color="#2E7D32" style={{ marginRight: 8 }} />
+                    <Ionicons name="location" size={18} color="#15803D" style={{ marginRight: 8 }} />
                     <Text style={styles.districtText}>{item.district} District</Text>
                     {selectedLocation.includes(item.district) && (
-                      <Ionicons name="checkmark-circle" size={18} color="#2E7D32" style={{ marginLeft: 'auto' }} />
+                      <Ionicons name="checkmark-circle" size={18} color="#15803D" style={{ marginLeft: 'auto' }} />
                     )}
                   </TouchableOpacity>
 
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   },
   talukaChipSelected: {
     backgroundColor: '#E8F5E9',
-    borderColor: '#2E7D32',
+    borderColor: '#15803D',
   },
   talukaText: {
     fontSize: 12,
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   talukaTextSelected: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontWeight: '700',
   },
 });

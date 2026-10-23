@@ -124,5 +124,15 @@
   "certificateVerified": "Certificate Verified",
   "certificateId": "Certificate ID",
   "certificateTitle": "AI-BASED PRODUCT QUALITY ASSESSMENT CERTIFICATE",
-  "disclaimerLegal": "This certificate represents an AI-based visual quality assessment from the submitted product image. It is not a substitute for laboratory testing or official government certification."
+  "disclaimerLegal": "This certificate represents an AI-based visual quality assessment from the submitted product image. It is not a substitute for laboratory testing or official government certification.",
+  "optionLogisticsPartner": "OPTION A — Use a Logistics Partner",
+  "optionLogisticsPartnerDesc": "Request an agricultural transport provider for pickup and delivery. Logistics charges are calculated and paid separately.",
+  "optionNoLogistics": "OPTION B — No Logistics Partner (Self Arrangement)",
+  "optionNoLogisticsDesc": "No transport partner needed. Direct self-pickup or transport arranged between farmer and buyer. No logistics fee is added.",
+  "logisticsCharges": "Logistics Cost",
+  "logisticsPayer": "Charges Borne By",
+  "payerBuyer": "Buyer",
+  "payerFarmer": "Farmer",
+  "acceptOfferTitle": "Accept Produce Offer",
+  "acceptOfferSubtitle": "Select your transportation preference to confirm the order"
 }

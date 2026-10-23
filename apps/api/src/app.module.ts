@@ -38,6 +38,7 @@ import { AiModule } from './ai/ai.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { CertificatesModule } from './certificates/certificates.module.js';
 import { Certificate } from './certificates/entities/certificate.entity.js';
+import { Negotiation } from './negotiations/entities/negotiation.entity.js';
 
 import { Order } from './orders/entities/order.entity.js';
 import { Offer } from './offers/entities/offer.entity.js';
@@ -62,35 +63,47 @@ import { AdminModule } from './admin/admin.module.js';
       imports: [ConfigModule],
       inject: [ConfigService],
 
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST'),
-        port: Number(configService.get<string>('DB_PORT')),
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_NAME'),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        const isSsl =
+          configService.get<string>('DB_SSL') === 'true' ||
+          (databaseUrl && databaseUrl.includes('sslmode=require')) ||
+          (databaseUrl && databaseUrl.includes('neon.tech'));
 
-        entities: [
-          User,
-          Farmer,
-          Crop,
-          ProduceListing,
-          Auction,
-          AuctionBid,
-          Offer,
-          Order,
-          ProducePassport,
-          MarketPrice,
-          PricePrediction,
-          Certificate,
-          LogisticsRequest,
-          Notification,
-          Message,
-        ],
-
-        synchronize: false,
-        logging: ['error'],
-      }),
+        return {
+          type: 'postgres' as const,
+          ...(databaseUrl
+            ? { url: databaseUrl }
+            : {
+                host: configService.get<string>('DB_HOST', 'localhost'),
+                port: Number(configService.get<string>('DB_PORT', '5432')),
+                username: configService.get<string>('DB_USERNAME', 'postgres'),
+                password: configService.get<string>('DB_PASSWORD', 'postgres'),
+                database: configService.get<string>('DB_NAME', 'pikmoolya'),
+              }),
+          ssl: isSsl ? { rejectUnauthorized: false } : false,
+          entities: [
+            User,
+            Farmer,
+            Crop,
+            ProduceListing,
+            Auction,
+            AuctionBid,
+            Offer,
+            Order,
+            ProducePassport,
+            MarketPrice,
+            PricePrediction,
+            Certificate,
+            Negotiation,
+            LogisticsRequest,
+            Notification,
+            Message,
+          ],
+          synchronize: false,
+          logging: ['error'],
+        };
+      },
     }),
 
     AuthModule,

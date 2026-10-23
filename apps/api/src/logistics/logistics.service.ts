@@ -24,7 +24,12 @@ export class LogisticsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async createForOrder(order: Order, cropName: string, unit: string) {
+  async createForOrder(
+    order: Order,
+    cropName: string,
+    unit: string,
+    options?: { pickupLocation?: string; deliveryLocation?: string; estimatedCost?: number },
+  ) {
     const existing = await this.logisticsRepository.findOne({
       where: { orderId: order.id },
     });
@@ -33,20 +38,43 @@ export class LogisticsService {
       return existing;
     }
 
+    let farmerUserId = order.farmerId;
+    let buyerUserId = order.buyerId;
+
+    try {
+      const farmer = await this.orderRepository.manager.query(
+        'SELECT user_id FROM farmers WHERE id = $1 LIMIT 1',
+        [order.farmerId],
+      );
+      if (farmer && farmer.length > 0 && farmer[0].user_id) {
+        farmerUserId = farmer[0].user_id;
+      }
+
+      const buyer = await this.orderRepository.manager.query(
+        'SELECT user_id FROM buyers WHERE id = $1 LIMIT 1',
+        [order.buyerId],
+      );
+      if (buyer && buyer.length > 0 && buyer[0].user_id) {
+        buyerUserId = buyer[0].user_id;
+      }
+    } catch {
+      // Keep original
+    }
+
     const request = this.logisticsRepository.create({
       orderId: order.id,
-      farmerId: order.farmerId,
-      buyerId: order.buyerId,
-      pickupLocation: 'Farmer Hub, Pune District, Maharashtra',
-      deliveryLocation: 'Buyer Warehouse, APMC Market, Mumbai',
+      farmerId: farmerUserId,
+      buyerId: buyerUserId,
+      pickupLocation: options?.pickupLocation || order.pickupDetails || 'Farmer Farm / Collection Hub, Pune District',
+      deliveryLocation: options?.deliveryLocation || order.deliveryDetails || 'Buyer Commercial Warehouse / APMC Market',
       cropName: cropName || 'Agricultural Produce',
       quantity: Number(order.quantity),
       unit: unit || 'kg',
       distanceKm: 45,
-      vehicleType: Number(order.quantity) > 1000 ? 'Heavy Truck (10T)' : 'Medium Pickup (2.5T)',
-      estimatedCost: Math.round(Number(order.quantity) * 1.5 + 800),
+      vehicleType: Number(order.quantity) > 1000 ? 'Heavy Commercial Truck (10T)' : 'Medium Pickup (2.5T)',
+      estimatedCost: options?.estimatedCost ? Number(options.estimatedCost) : Math.round(Number(order.quantity) * 1.5 + 800),
       status: LogisticsStatus.REQUESTED,
-      pickupDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+      pickupDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Next-day pickup
     });
 
     const saved = await this.logisticsRepository.save(request);

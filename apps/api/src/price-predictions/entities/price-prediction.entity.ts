@@ -1,4 +1,4 @@
-﻿import {
+import {
   Column,
   CreateDateColumn,
   Entity,
@@ -14,12 +14,15 @@ export class PricePrediction {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'crop_id', type: 'uuid' })
-  cropId!: string;
+  @Column({ name: 'crop_id', type: 'uuid', nullable: true })
+  cropId!: string | null;
 
-  @ManyToOne(() => Crop, { eager: true })
+  @ManyToOne(() => Crop, { nullable: true })
   @JoinColumn({ name: 'crop_id' })
-  crop!: Crop;
+  crop!: Crop | null;
+
+  @Column({ name: 'listing_id', type: 'uuid', nullable: true })
+  listingId!: string | null;
 
   @Column({
     name: 'market_name',
@@ -31,8 +34,9 @@ export class PricePrediction {
   @Column({
     name: 'prediction_date',
     type: 'date',
+    nullable: true,
   })
-  predictionDate!: string;
+  predictionDate!: string | null;
 
   @Column({
     name: 'predicted_price',

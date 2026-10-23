@@ -44,6 +44,7 @@ import { CameraCaptureModal } from './src/components/CameraCaptureModal';
 import { StatusBadge } from './src/components/StatusBadge';
 import { CropSelectorModal } from './src/components/CropSelectorModal';
 import { CounterOfferModal } from './src/components/CounterOfferModal';
+import { AcceptOfferModal } from './src/components/AcceptOfferModal';
 import { EmptyState } from './src/components/EmptyState';
 import { LocationSelectorModal } from './src/components/LocationSelectorModal';
 import { SelectionBottomSheet, SelectionOption } from './src/components/SelectionBottomSheet';
@@ -52,9 +53,56 @@ import { OrderTimeline } from './src/components/OrderTimeline';
 import { LogisticsCard, LogisticsRequestData } from './src/components/LogisticsCard';
 import { AdminDashboardView, AdminStats } from './src/components/AdminDashboardView';
 import { PikMoolyaLogo } from './src/components/branding/PikMoolyaLogo';
+import { LiveApmcTicker } from './src/components/LiveApmcTicker';
 
-const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.46:3000/api').replace(/\/$/, '');
-const AI_SERVICE_URL = 'http://192.168.1.46:8000';
+const rawApiUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://10.108.139.217:3000').trim().replace(/\/+$/, '');
+const API_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+const AI_SERVICE_URL = (process.env.EXPO_PUBLIC_AI_URL || 'http://10.108.139.217:8000').trim().replace(/\/+$/, '');
+
+const getCropImage = (cropName: string = '', fallbackUrl?: string) => {
+  const name = cropName.toLowerCase();
+  if (name.includes('wheat') || name.includes('gehun')) {
+    return 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('rice') || name.includes('chawal') || name.includes('paddy') || name.includes('basmati')) {
+    return 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('jowar') || name.includes('sorghum')) {
+    return 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('bajra') || name.includes('millet')) {
+    return 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('onion') || name.includes('pyaz')) {
+    return 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('soybean') || name.includes('soya')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/c/c9/Soybeans.jpg';
+  }
+  if (name.includes('cotton') || name.includes('kapas')) {
+    return 'https://images.unsplash.com/photo-1606787366850-de6330128bfc?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('gram') || name.includes('chana') || name.includes('chickpea')) {
+    return 'https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('corn') || name.includes('maize') || name.includes('makka')) {
+    return 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('sugarcane') || name.includes('ganna')) {
+    return 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('potato') || name.includes('aloo')) {
+    return 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=600&q=80';
+  }
+  if (name.includes('tomato')) {
+    return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80';
+  }
+  if (fallbackUrl && fallbackUrl.startsWith('http') && !fallbackUrl.includes('photo-1592924357228')) {
+    return fallbackUrl;
+  }
+  return 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80';
+};
+
 
 type Screen =
   | 'home'
@@ -111,6 +159,9 @@ type Listing = {
   qualityDescription?: string;
   visibleCondition?: string;
   storageInfo?: string;
+  photoUri?: string;
+  imageUrl?: string;
+  photoUrl?: string;
   locationApproximate?: string;
   locationName?: string;
   harvestDate?: string;
@@ -137,6 +188,23 @@ const money = (value: any) => {
 };
 
 const getApiErrorMessage = (error: any, fallback: string) => {
+  if (
+    error?.name === 'AbortError' ||
+    error?.code === 'ECONNABORTED' ||
+    (typeof error?.message === 'string' && error.message.toLowerCase().includes('timeout'))
+  ) {
+    return 'Connection timed out. The server took too long to respond. Please check your network and try again.';
+  }
+
+  if (
+    error?.code === 'ERR_NETWORK' ||
+    error?.message === 'Network Error' ||
+    error?.message === 'Network request failed' ||
+    (!error?.response && error?.request)
+  ) {
+    return `Unable to reach PikMoolya server (${API_URL}). Please ensure your phone is connected to the hotspot Wi-Fi and the server is running.`;
+  }
+
   const rawMessage =
     error?.response?.data?.message ??
     error?.response?.data?.error ??
@@ -279,6 +347,8 @@ export default function App() {
   const [cropDropdownOpen, setCropDropdownOpen] = useState(false);
   const [counterModalVisible, setCounterModalVisible] = useState(false);
   const [selectedOfferForCounter, setSelectedOfferForCounter] = useState<any>(null);
+  const [acceptModalVisible, setAcceptModalVisible] = useState(false);
+  const [selectedOfferForAccept, setSelectedOfferForAccept] = useState<any>(null);
   const [authError, setAuthError] = useState('');
   const [authSuccessMsg, setAuthSuccessMsg] = useState('');
 
@@ -291,6 +361,27 @@ export default function App() {
   const [buyerOfferQuantity, setBuyerOfferQuantity] = useState('');
   const [buyerOfferMessage, setBuyerOfferMessage] = useState('');
   const [buyerRequiredQty, setBuyerRequiredQty] = useState('500');
+
+  // Quick Estimator State on Farmer Dashboard (matching Website)
+  const [quickCrop, setQuickCrop] = useState<string>('Wheat');
+  const [quickQty, setQuickQty] = useState<number>(50);
+  const quickEstPrice = quickCrop === 'Wheat' ? 2450 : quickCrop === 'Rice' ? 3200 : quickCrop === 'Soybean' ? 4400 : 2100;
+  const quickGross = quickQty * quickEstPrice;
+
+  // Marketplace Category Filter Pills & Products
+  const [activeMarketCategory, setActiveMarketCategory] = useState<string>('ALL');
+  const [marketplaceProducts, setMarketplaceProducts] = useState<any[]>([]);
+
+  const fetchMarketplaceProducts = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/products`);
+      if (res.data?.data?.products) {
+        setMarketplaceProducts(res.data.data.products);
+      }
+    } catch (e: any) {
+      console.log('Error fetching marketplace products:', e?.message);
+    }
+  };
 
   // Role-Based Workflow System States
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -375,6 +466,7 @@ export default function App() {
       } else if (userRole === 'BUYER') {
         loadBuyerDashboard(token);
         loadBuyerOffers(token);
+        fetchMarketplaceProducts();
       } else if (userRole === 'LOGISTICS_PARTNER') {
         fetchLogisticsRequests(token);
       } else if (userRole === 'ADMIN') {
@@ -459,16 +551,46 @@ export default function App() {
   });
 
   const login = async () => {
+    if (loading) return;
     try {
       setLoading(true);
       setAuthError('');
       setAuthSuccessMsg('');
 
-      const response = await axios.post(`${API_URL}/auth/login`, {
-        phone,
-        password,
-        role: selectedRole,
-      });
+      const rawPhone = phone.trim();
+      const normalizedPhone = rawPhone.startsWith('+')
+        ? rawPhone
+        : rawPhone.length === 10
+        ? `+91${rawPhone}`
+        : rawPhone;
+
+      let response: any;
+      try {
+        response = await axios.post(
+          `${API_URL}/auth/login`,
+          {
+            phone: normalizedPhone,
+            password,
+          },
+          { timeout: 10000 }
+        );
+      } catch (firstErr: any) {
+        if (
+          normalizedPhone !== rawPhone &&
+          firstErr?.response?.status === 401
+        ) {
+          response = await axios.post(
+            `${API_URL}/auth/login`,
+            {
+              phone: rawPhone,
+              password,
+            },
+            { timeout: 10000 }
+          );
+        } else {
+          throw firstErr;
+        }
+      }
 
       const jwt =
         response.data?.accessToken ??
@@ -477,34 +599,32 @@ export default function App() {
 
       if (!jwt) throw new Error('JWT token not found');
 
-      let serverRole: UserRole = selectedRole;
-      let name = 'User';
+      let serverRole: UserRole = (response.data?.user?.role as UserRole) || 'FARMER';
+      let name = response.data?.user?.name || 'User';
 
       try {
-        const meResponse = await axios.get(API_URL + '/auth/me', { headers: authHeaders(jwt) });
-        serverRole = (meResponse.data?.user?.role as UserRole) || response.data?.user?.role || selectedRole;
-        if (meResponse.data?.user?.name) name = meResponse.data.user.name;
-        else if (response.data?.user?.name) name = response.data.user.name;
+        const meResponse = await axios.get(API_URL + '/auth/me', {
+          headers: authHeaders(jwt),
+          timeout: 10000,
+        });
+        if (meResponse.data?.user?.role) {
+          serverRole = meResponse.data.user.role as UserRole;
+        }
+        if (meResponse.data?.user?.name) {
+          name = meResponse.data.user.name;
+        }
       } catch (meErr) {
-        serverRole = (response.data?.user?.role as UserRole) || selectedRole;
-        if (response.data?.user?.name) name = response.data.user.name;
+        if (response.data?.user?.role) {
+          serverRole = response.data.user.role as UserRole;
+        }
+        if (response.data?.user?.name) {
+          name = response.data.user.name;
+        }
       }
 
       console.log(`[LOGIN SUCCESS] Authenticated User: ${name}, Server Role: ${serverRole}`);
 
-      if (serverRole !== selectedRole) {
-        const roleDisplayNames: Record<UserRole, string> = {
-          FARMER: 'Farmer',
-          BUYER: 'Buyer',
-          LOGISTICS_PARTNER: 'Logistics Partner',
-          ADMIN: 'Admin',
-        };
-        const actualRoleName = roleDisplayNames[serverRole] || serverRole;
-        setAuthError(`This account is registered as ${actualRoleName}. Please select the correct account type.`);
-        setLoading(false);
-        return;
-      }
-
+      setSelectedRole(serverRole);
       setUserName(name);
       setUserRole(serverRole);
       setToken(jwt);
@@ -533,6 +653,7 @@ export default function App() {
   };
 
   const register = async () => {
+    if (loading) return;
     try {
       setLoading(true);
       setAuthError('');
@@ -554,12 +675,23 @@ export default function App() {
         return;
       }
 
-      const response = await axios.post(`${API_URL}/auth/register`, {
-        phone: regPhone,
-        password: regPassword,
-        role: selectedRole,
-        preferredLanguage: lang,
-      });
+      const rawRegPhone = regPhone.trim();
+      const normalizedRegPhone = rawRegPhone.startsWith('+')
+        ? rawRegPhone
+        : rawRegPhone.length === 10
+        ? `+91${rawRegPhone}`
+        : rawRegPhone;
+
+      const response = await axios.post(
+        `${API_URL}/auth/register`,
+        {
+          phone: normalizedRegPhone,
+          password: regPassword,
+          role: selectedRole,
+          preferredLanguage: lang,
+        },
+        { timeout: 10000 }
+      );
 
       const jwt =
         response.data?.accessToken ??
@@ -569,7 +701,10 @@ export default function App() {
       if (jwt) {
         let serverRole: UserRole = selectedRole;
         try {
-          const meResponse = await axios.get(API_URL + '/auth/me', { headers: authHeaders(jwt) });
+          const meResponse = await axios.get(API_URL + '/auth/me', {
+            headers: authHeaders(jwt),
+            timeout: 10000,
+          });
           serverRole = (meResponse.data?.user?.role as UserRole) || response.data?.user?.role || selectedRole;
         } catch {
           serverRole = (response.data?.user?.role as UserRole) || selectedRole;
@@ -797,11 +932,16 @@ export default function App() {
     }
   };
 
-  const handleAcceptOffer = async (offerId: string) => {
+  const handleAcceptOffer = async (offerId: string, options?: any) => {
     try {
       setLoading(true);
-      await axios.post(`${API_URL}/offers/${offerId}/accept`, {}, { headers: authHeaders() });
-      Alert.alert('Offer Accepted', 'You have accepted the offer. Order created!');
+      await axios.post(`${API_URL}/offers/${offerId}/accept`, options || {}, { headers: authHeaders() });
+      Alert.alert(
+        'Offer Accepted',
+        options?.logisticsRequired
+          ? 'You have accepted the offer! Order created with logistics partner assistance.'
+          : 'You have accepted the offer! Order created for direct self-pickup without logistics partner.'
+      );
       if (token) await loadDashboard(token);
     } catch (err: any) {
       Alert.alert('Error', getApiErrorMessage(err, 'Unable to accept offer.'));
@@ -1159,14 +1299,17 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         <StatusBar style="dark" />
 
-        {/* UNCHANGED HEADER WITH LANGUAGE & ACCOUNT DROPDOWNS */}
+        {/* TOP HEADER WITH LANGUAGE & ACCOUNT DROPDOWNS */}
         <AppHeader
           currentLanguage={lang}
           onOpenLanguageModal={() => setLangModalVisible(true)}
-          selectedAccount={selectedRole.toLowerCase()}
+          selectedAccount={selectedRole === 'LOGISTICS_PARTNER' ? 'Logistics' : selectedRole.toLowerCase()}
           onOpenAccountModal={() => setAccountModalVisible(true)}
           showAccountSelector={true}
         />
+
+        {/* LIVE APMC MANDI TICKER (MATCHING WEBSITE HEADER) */}
+        <LiveApmcTicker language={lang} />
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -1177,22 +1320,94 @@ export default function App() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* BRAND AREA */}
+            {/* BRAND AREA WITH SPROUT BADGE (MATCHING WEBSITE LOGIN) */}
             <View style={styles.authBrandSection}>
+              <View
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 14,
+                  backgroundColor: '#DCFCE7',
+                  borderWidth: 1,
+                  borderColor: '#BBF7D0',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 10,
+                }}
+              >
+                <Ionicons name="leaf" size={28} color="#15803D" />
+              </View>
               <PikMoolyaLogo size="medium" width={200} height={50} />
             </View>
 
             {/* AUTHENTICATION TITLES */}
             <View style={styles.authTitleSection}>
               <Text style={styles.authMainTitle}>
-                {authMode === 'signin' ? 'Welcome back' : 'Create your account'}
+                {authMode === 'signin'
+                  ? (lang === 'mr' ? 'आपल्या खात्यात साइन इन करा' : 'Sign in to your account')
+                  : (lang === 'mr' ? 'नवीन खाते तयार करा' : 'Create your account')}
               </Text>
               <Text style={styles.authSubTitle}>
                 {authMode === 'signin'
-                  ? 'Sign in to continue to PikMoolya'
-                  : 'Join PikMoolya and access fair prices and direct market opportunities.'}
+                  ? (lang === 'mr' ? 'थेट कृषी व्यापार, रास्त भाव शोध आणि वाहतूक व्यवस्थापन' : 'Access direct farm trading, fair pricing, and logistics')
+                  : (lang === 'mr' ? 'पिकमूल्य मध्ये सामील व्हा आणि योग्य भाव व थेट बाजारपेठ मिळवा.' : 'Join PikMoolya and access fair prices and direct market opportunities.')}
               </Text>
             </View>
+
+            {/* 1-CLICK QUICK DEMO LOGIN (EXACT WEBSITE MIRROR) */}
+            {authMode === 'signin' && (
+              <View style={styles.demoLoginBox}>
+                <View style={styles.demoLoginHeaderRow}>
+                  <Ionicons name="flash" size={13} color="#D97706" />
+                  <Text style={styles.demoLoginHeader}>
+                    {t('appName', lang)} • 1-CLICK DEMO LOGIN
+                  </Text>
+                </View>
+                <View style={styles.demoLoginRow}>
+                  <TouchableOpacity
+                    style={[styles.demoBtn, styles.demoBtnFarmer]}
+                    onPress={() => {
+                      setPhone('+919876543210');
+                      setPassword('Farmer@12345');
+                      setSelectedRole('FARMER');
+                      showToast(lang === 'mr' ? 'शेतकरी डेमो क्रेडेंशियल्स भरले (Ramesh Patil)' : 'Loaded Farmer demo credentials (Ramesh Patil)');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="leaf" size={13} color="#15803D" style={{ marginRight: 4 }} />
+                    <Text style={styles.demoBtnTextFarmer}>{t('roleFarmer', lang) || t('farmer', lang)}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.demoBtn, styles.demoBtnBuyer]}
+                    onPress={() => {
+                      setPhone('+919876543211');
+                      setPassword('Buyer@12345');
+                      setSelectedRole('BUYER');
+                      showToast(lang === 'mr' ? 'खरेदीदार डेमो क्रेडेंशियल्स भरले (MahaAgro Traders)' : 'Loaded Buyer demo credentials (MahaAgro Traders)');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="business" size={13} color="#2563EB" style={{ marginRight: 4 }} />
+                    <Text style={styles.demoBtnTextBuyer}>{t('roleBuyer', lang) || t('buyer', lang)}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.demoBtn, styles.demoBtnLogistics]}
+                    onPress={() => {
+                      setPhone('+919876543212');
+                      setPassword('Logistics@12345');
+                      setSelectedRole('LOGISTICS_PARTNER');
+                      showToast(lang === 'mr' ? 'वाहतूकदार डेमो क्रेडेंशियल्स भरले' : 'Loaded Logistics Partner demo credentials');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="bus" size={13} color="#D97706" style={{ marginRight: 4 }} />
+                    <Text style={styles.demoBtnTextLogistics}>Logistics</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* SEGMENTED SWITCH */}
             <View style={styles.segmentedControl}>
@@ -1253,20 +1468,6 @@ export default function App() {
               {authMode === 'signin' ? (
                 /* SIGN IN FORM */
                 <View style={styles.fieldGap}>
-                  <Text style={styles.fieldLabel}>Account Type</Text>
-                  <TouchableOpacity
-                    style={styles.dropdownBtn}
-                    onPress={() => setAccountModalVisible(true)}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="person-circle-outline" size={18} color="#2E7D32" style={{ marginRight: 6 }} />
-                      <Text style={styles.dropdownBtnText}>
-                        {selectedRole === 'FARMER' ? 'Farmer' : selectedRole === 'BUYER' ? 'Buyer' : selectedRole === 'LOGISTICS_PARTNER' ? 'Logistics Partner' : 'Admin'}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-down" size={16} color="#64748B" />
-                  </TouchableOpacity>
-
                   <Text style={styles.fieldLabel}>{t('phoneNumber', lang)}</Text>
                   <View style={styles.fieldInputRow}>
                     <View style={styles.countryPrefixBox}>
@@ -1276,7 +1477,7 @@ export default function App() {
                       style={styles.fieldTextInput}
                       value={phone}
                       onChangeText={setPhone}
-                      placeholder="Enter mobile number"
+                      placeholder={t('enterPhone', lang)}
                       keyboardType="phone-pad"
                       placeholderTextColor="#94A3B8"
                     />
@@ -1294,7 +1495,7 @@ export default function App() {
                       style={styles.fieldTextInput}
                       value={password}
                       onChangeText={setPassword}
-                      placeholder="Enter password"
+                      placeholder={t('enterPassword', lang)}
                       secureTextEntry={!showPassword}
                       placeholderTextColor="#94A3B8"
                     />
@@ -1313,9 +1514,9 @@ export default function App() {
 
                   <TouchableOpacity
                     style={styles.forgotPassBtn}
-                    onPress={() => Alert.alert('Forgot Password', 'Please contact support or reset password via OTP.')}
+                    onPress={() => Alert.alert(lang === 'mr' ? 'पासवर्ड विसरलात?' : 'Forgot Password', lang === 'mr' ? 'कृपया सपोर्टशी संपर्क साधा किंवा पासवर्ड रीसेट करा.' : 'Please contact support or reset password via OTP.')}
                   >
-                    <Text style={styles.forgotPassText}>Forgot password?</Text>
+                    <Text style={styles.forgotPassText}>{lang === 'mr' ? 'पासवर्ड विसरलात?' : 'Forgot password?'}</Text>
                   </TouchableOpacity>
 
                   {authError ? (
@@ -1334,7 +1535,7 @@ export default function App() {
                     {loading ? (
                       <View style={styles.loadingRow}>
                         <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
-                        <Text style={styles.mainSubmitText}>Signing in...</Text>
+                        <Text style={styles.mainSubmitText}>{lang === 'mr' ? 'साइन इन होत आहे...' : 'Signing in...'}</Text>
                       </View>
                     ) : (
                       <Text style={styles.mainSubmitText}>{t('signIn', lang)}</Text>
@@ -1383,7 +1584,7 @@ export default function App() {
                       style={styles.fieldTextInput}
                       value={regPhone}
                       onChangeText={setRegPhone}
-                      placeholder="Enter mobile number"
+                      placeholder={t('enterPhone', lang)}
                       keyboardType="phone-pad"
                       placeholderTextColor="#94A3B8"
                     />
@@ -1401,7 +1602,7 @@ export default function App() {
                       style={styles.fieldTextInput}
                       value={regPassword}
                       onChangeText={setRegPassword}
-                      placeholder="Create password"
+                      placeholder={t('enterPassword', lang)}
                       secureTextEntry={!showRegPassword}
                       placeholderTextColor="#94A3B8"
                     />
@@ -1430,7 +1631,7 @@ export default function App() {
                       style={styles.fieldTextInput}
                       value={regConfirmPassword}
                       onChangeText={setRegConfirmPassword}
-                      placeholder="Confirm password"
+                      placeholder={t('enterConfirmPassword', lang)}
                       secureTextEntry={!showRegPassword}
                       placeholderTextColor="#94A3B8"
                     />
@@ -1452,7 +1653,7 @@ export default function App() {
                     {loading ? (
                       <View style={styles.loadingRow}>
                         <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
-                        <Text style={styles.mainSubmitText}>Creating account...</Text>
+                        <Text style={styles.mainSubmitText}>{lang === 'mr' ? 'खाते तयार होत आहे...' : 'Creating account...'}</Text>
                       </View>
                     ) : (
                       <Text style={styles.mainSubmitText}>{t('createAccount', lang)}</Text>
@@ -1478,7 +1679,7 @@ export default function App() {
             {/* SUBTLE FOOTNOTE */}
             <View style={styles.authFootnote}>
               <Text style={styles.authFootnoteText}>
-                Fair Price Guidance | Direct Marketplace Access
+                {t('tagline', lang)}
               </Text>
             </View>
           </ScrollView>
@@ -1494,8 +1695,11 @@ export default function App() {
 
         <AccountSelectorModal
           visible={accountModalVisible}
-          selectedRole={selectedRole.toLowerCase() as AccountType}
-          onSelectRole={(role) => setSelectedRole(role.toUpperCase() as UserRole)}
+          selectedRole={selectedRole === 'LOGISTICS_PARTNER' ? 'logistics' : (selectedRole.toLowerCase() as AccountType)}
+          onSelectRole={(role) => {
+            const mappedRole: UserRole = role === 'logistics' ? 'LOGISTICS_PARTNER' : (role.toUpperCase() as UserRole);
+            setSelectedRole(mappedRole);
+          }}
           onClose={() => setAccountModalVisible(false)}
         />
       </SafeAreaView>
@@ -1514,6 +1718,9 @@ export default function App() {
         onOpenNotifications={() => setNotificationModalVisible(true)}
       />
 
+      {/* LIVE APMC MANDI BENCHMARK TICKER (MATCHING WEBSITE) */}
+      <LiveApmcTicker language={lang} />
+
       {toastMessage && (
         <View style={styles.toastContainer}>
           <Text style={styles.toastText}>{toastMessage}</Text>
@@ -1529,9 +1736,197 @@ export default function App() {
             {/* FARMER HOME SCREEN */}
             {screen === 'home' && (
               <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                <View style={styles.welcomeBox}>
-                  <Text style={styles.greetingTitle}>{t('goodMorning', lang)}, {userName || t('farmer', lang)} </Text>
-                  <Text style={styles.greetingSub}>{t('tagline', lang)}</Text>
+                {/* HERO PLATFORM BANNER (MATCHING WEBSITE HOME HERO) */}
+                <View style={styles.homeHeroBanner}>
+                  <View style={styles.heroBadge}>
+                    <Ionicons name="sparkles" size={13} color="#15803D" />
+                    <Text style={styles.heroBadgeText}>
+                      {lang === 'mr' ? 'पुढील पिढीचे कृषी व्यापार व्यासपीठ' : 'Next-Gen Agri Commerce Platform'}
+                    </Text>
+                  </View>
+                  <Text style={styles.heroMainTitle}>
+                    {lang === 'mr' ? 'शेतकऱ्यांसाठी रास्त भाव.\nखरेदीदारांसाठी थेट बाजारपेठ.' : 'Fair Prices for Farmers.\nDirect Market Access for Buyers.'}
+                  </Text>
+                  <Text style={styles.heroSubText}>
+                    {lang === 'mr'
+                      ? 'पिकमूल्य शास्त्रीय बहु-घटक AI किंमत शोध, संगणक दृष्टी आधारित गुणवत्ता मूल्यांकन आणि थेट दलालमुक्त खरेदी-विक्रीद्वारे कृषी व्यापारात संपूर्ण पारदर्शकता आणते.'
+                      : 'PikMoolya solves agricultural price asymmetry through scientific multi-factor AI price discovery, computer vision crop quality certification, and direct middleman-free trade.'}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+                    <TouchableOpacity
+                      style={[styles.primaryButton, { flex: 1, paddingVertical: 10 }]}
+                      onPress={() => { resetForm(); navigateTo('add'); }}
+                    >
+                      <Ionicons name="add-circle" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                      <Text style={styles.primaryBtnText}>{t('sellProduce', lang)}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.outlineButton, { flex: 1, paddingVertical: 10 }]}
+                      onPress={handleOpenRealCamera}
+                    >
+                      <Ionicons name="camera" size={16} color="#15803D" style={{ marginRight: 4 }} />
+                      <Text style={styles.outlineBtnText}>{t('checkQuality', lang)}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* 4 STAT METRICS HIGHLIGHTS (2x2 GRID MATCHING WEBSITE 4 METRICS) */}
+                <View style={styles.statsGrid2x2}>
+                  <View style={styles.statsRow}>
+                    <View style={styles.statCard}>
+                      <Text style={[styles.statNumber, { color: '#166534' }]}>₹0</Text>
+                      <Text style={styles.statLabel}>
+                        {lang === 'mr' ? 'मध्यस्थ किंवा दलाली शुल्क' : 'Middleman Brokerage Fees'}
+                      </Text>
+                    </View>
+                    <View style={styles.statCard}>
+                      <Text style={[styles.statNumber, { color: '#2563EB' }]}>46+</Text>
+                      <Text style={styles.statLabel}>
+                        {lang === 'mr' ? 'पिके व वाणांचे आधारभूत दर' : 'Crops & Varietal Benchmarks'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.statsRow}>
+                    <View style={styles.statCard}>
+                      <Text style={[styles.statNumber, { color: '#D97706' }]}>Grade A/B/C</Text>
+                      <Text style={styles.statLabel}>
+                        {lang === 'mr' ? 'संगणक दृष्टी गुणवत्ता मूल्यांकन' : 'Computer Vision Quality Proof'}
+                      </Text>
+                    </View>
+                    <View style={styles.statCard}>
+                      <Text style={[styles.statNumber, { color: '#16A34A' }]}>100%</Text>
+                      <Text style={styles.statLabel}>
+                        {lang === 'mr' ? 'सुरक्षित थेट व्यवहार पूर्तता' : 'Direct Trade Settlement'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* INTERACTIVE QUICK FAIR PRICE ESTIMATOR (MATCHING WEBSITE CALCULATOR PREVIEW) */}
+                <View style={styles.quickCalcCard}>
+                  <View style={styles.quickCalcHeader}>
+                    <Ionicons name="scale-outline" size={20} color="#15803D" />
+                    <Text style={styles.quickCalcTitle}>
+                      {lang === 'mr' ? 'थेट रास्त भाव गणक पूर्वावलोकन' : 'Interactive Fair Price Calculator Preview'}
+                    </Text>
+                  </View>
+                  <Text style={styles.quickCalcSub}>
+                    {lang === 'mr'
+                      ? 'तुमच्या शेतमालाची नोंदणी करण्यापूर्वी थेट वैज्ञानिक किंमत शोध प्रणालीचा अनुभव घ्या:'
+                      : 'Experience the scientific pricing formula live before registering your produce listing:'}
+                  </Text>
+
+                  {/* Crop Selection Pills */}
+                  <View style={styles.calcCropPillsRow}>
+                    {[
+                      { key: 'Wheat', label: lang === 'mr' ? '🌾 गहू' : '🌾 Wheat' },
+                      { key: 'Rice', label: lang === 'mr' ? '🍚 तांदूळ' : '🍚 Rice' },
+                      { key: 'Soybean', label: lang === 'mr' ? '🌱 सोयाबीन' : '🌱 Soybean' },
+                      { key: 'Gram', label: lang === 'mr' ? '🌿 हरभरा' : '🌿 Gram' },
+                    ].map((c) => (
+                      <TouchableOpacity
+                        key={c.key}
+                        style={[styles.calcCropPill, quickCrop === c.key && styles.calcCropPillActive]}
+                        onPress={() => setQuickCrop(c.key)}
+                      >
+                        <Text style={[styles.calcCropPillText, quickCrop === c.key && styles.calcCropPillTextActive]}>
+                          {c.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Quantity Stepper Selector */}
+                  <View style={styles.calcQtyRow}>
+                    <Text style={styles.calcQtyLabel}>
+                      {lang === 'mr' ? `प्रमाण: ${quickQty} क्विंटल` : `Quantity: ${quickQty} Quintals`}
+                    </Text>
+                    <View style={styles.calcQtyPills}>
+                      {[25, 50, 100, 150].map((q) => (
+                        <TouchableOpacity
+                          key={q}
+                          style={[styles.calcQtyBtn, quickQty === q && styles.calcQtyBtnActive]}
+                          onPress={() => setQuickQty(q)}
+                        >
+                          <Text style={[styles.calcQtyBtnText, quickQty === q && styles.calcQtyBtnTextActive]}>
+                            {q} q
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Calculation Result */}
+                  <View style={styles.calcResultBox}>
+                    <Text style={styles.calcResultLabel}>
+                      {lang === 'mr' ? 'AI रास्त मूल्य अंदाज' : 'AI FAIR VALUE ESTIMATE'}
+                    </Text>
+                    <Text style={styles.calcResultAmount}>
+                      ₹{quickGross.toLocaleString('en-IN')}{' '}
+                      <Text style={styles.calcResultRate}>(₹{quickEstPrice}/q)</Text>
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.primaryButton, { paddingVertical: 10 }]}
+                    onPress={() => {
+                      setSelectedCrop(crops[0] || MAHARASHTRA_CROP_CATALOG[0]);
+                      navigateTo('price');
+                    }}
+                  >
+                    <Ionicons name="analytics-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.primaryBtnText}>
+                      {lang === 'mr' ? '५-घटक रास्त भाव शोध' : 'Full 5-Factor Price Discovery'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* 3 CORE ARCHITECTURAL PILLARS (MATCHING WEBSITE PILLARS) */}
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={styles.sectionHeader}>
+                    {lang === 'mr' ? 'पिकमूल्य मुख्य आधारस्तंभ' : 'Core Architectural Pillars'}
+                  </Text>
+                  <View style={styles.pillarCard}>
+                    <View style={[styles.pillarIconBox, { backgroundColor: '#F0FDF4' }]}>
+                      <Ionicons name="trending-up" size={18} color="#15803D" />
+                    </View>
+                    <Text style={styles.pillarTitle}>
+                      {lang === 'mr' ? 'वैज्ञानिक रास्त भाव शोध' : 'Scientific Fair Price Discovery'}
+                    </Text>
+                    <Text style={styles.pillarDesc}>
+                      {lang === 'mr'
+                        ? 'पिकाचा वाण, काढणीची तारीख, अंतर, APMC ऐतिहासिक आकडेवारी आणि पुरवठा-मागणीवर आधारित रास्त भाव निश्चिती.'
+                        : 'Empirical price estimation calculating fair benchmarks based on crop variety, harvest date, location proximity, APMC historical data, and live supply demand tension.'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.pillarCard}>
+                    <View style={[styles.pillarIconBox, { backgroundColor: '#EFF6FF' }]}>
+                      <Ionicons name="ribbon-outline" size={18} color="#2563EB" />
+                    </View>
+                    <Text style={styles.pillarTitle}>
+                      {lang === 'mr' ? 'संगणक दृष्टी गुणवत्ता श्रेणीकरण' : 'Computer Vision Quality Grading'}
+                    </Text>
+                    <Text style={styles.pillarDesc}>
+                      {lang === 'mr'
+                        ? 'शेतकरी स्मार्टफोनने फोटो काढतात. AI मॉडेल दाण्यांचा आकार, रंग आणि गुणवत्तेचे विश्लेषण करून Grade A/B/C प्रमाणपत्र तयार करते.'
+                        : 'Farmers photograph produce with a smartphone camera. Fast image feature analysis evaluates grain uniformity, surface discoloration, vibrancy, and generates Grade A/B/C proofs.'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.pillarCard}>
+                    <View style={[styles.pillarIconBox, { backgroundColor: '#FEF3C7' }]}>
+                      <Ionicons name="shield-checkmark-outline" size={18} color="#D97706" />
+                    </View>
+                    <Text style={styles.pillarTitle}>
+                      {lang === 'mr' ? 'थेट पारदर्शक कृषी व्यापार' : 'Direct Transparent Trade'}
+                    </Text>
+                    <Text style={styles.pillarDesc}>
+                      {lang === 'mr'
+                        ? 'दलालांच्या मक्तेदारीऐवजी पारदर्शक अल्गोरिदम आणि थेट पडताळणीयोग्य व्यापार व सुरक्षित व्यवहार.'
+                        : 'Direct farmer-buyer negotiation engine with binding counteroffers, escrow protection, and direct transport booking.'}
+                    </Text>
+                  </View>
                 </View>
 
                 {/* MARKET PRICE CARD WITH CROP & MARKET DISPLAYED */}
@@ -1553,7 +1948,7 @@ export default function App() {
                       navigateTo('price');
                     }}
                   >
-                    <Ionicons name="analytics-outline" size={16} color="#2E7D32" style={{ marginRight: 6 }} />
+                    <Ionicons name="analytics-outline" size={16} color="#15803D" style={{ marginRight: 6 }} />
                     <Text style={styles.priceActionBtnText}>Calculate Best Market & Net Return</Text>
                   </TouchableOpacity>
                 </View>
@@ -1562,7 +1957,7 @@ export default function App() {
                 <View style={styles.actionGrid}>
                   <TouchableOpacity style={styles.quickActionCard} onPress={() => { resetForm(); navigateTo('add'); }}>
                     <View style={styles.actionIconBox}>
-                      <Ionicons name="add-circle-outline" size={24} color="#2E7D32" />
+                      <Ionicons name="add-circle-outline" size={24} color="#15803D" />
                     </View>
                     <Text style={styles.quickActionTitle}>{t('sellProduce', lang)}</Text>
                     <Text style={styles.quickActionSub}>{t('addProduce', lang)}</Text>
@@ -1570,7 +1965,7 @@ export default function App() {
 
                   <TouchableOpacity style={styles.quickActionCard} onPress={handleOpenRealCamera}>
                     <View style={styles.actionIconBox}>
-                      <Ionicons name="camera-outline" size={24} color="#2E7D32" />
+                      <Ionicons name="camera-outline" size={24} color="#15803D" />
                     </View>
                     <Text style={styles.quickActionTitle}>{t('checkQuality', lang)}</Text>
                     <Text style={styles.quickActionSub}>{t('takePhoto', lang)}</Text>
@@ -1580,7 +1975,7 @@ export default function App() {
                 <View style={styles.card}>
                   <View style={styles.cardHeaderRow}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="leaf-outline" size={20} color="#2E7D32" style={{ marginRight: 6 }} />
+                      <Ionicons name="leaf-outline" size={20} color="#15803D" style={{ marginRight: 6 }} />
                       <Text style={styles.cardTitle}>{t('myProducts', lang)}</Text>
                     </View>
                     <View style={styles.badgeGreenLight}>
@@ -1608,7 +2003,7 @@ export default function App() {
             {screen === 'price' && (
               <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 <TouchableOpacity style={styles.backLink} onPress={() => navigateTo('home')}>
-                  <Ionicons name="arrow-back" size={18} color="#2E7D32" style={{ marginRight: 4 }} />
+                  <Ionicons name="arrow-back" size={18} color="#15803D" style={{ marginRight: 4 }} />
                   <Text style={styles.backLinkText}>{t('home', lang)}</Text>
                 </TouchableOpacity>
 
@@ -1654,7 +2049,7 @@ export default function App() {
                   <Text style={styles.inputLabel}>Farm Location</Text>
                   <TouchableOpacity style={styles.dropdownBtn} onPress={() => setLocationModalVisible(true)}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="location-outline" size={18} color="#2E7D32" style={{ marginRight: 6 }} />
+                      <Ionicons name="location-outline" size={18} color="#15803D" style={{ marginRight: 6 }} />
                       <Text style={styles.dropdownBtnText}>{locationName}</Text>
                     </View>
                     <Ionicons name="chevron-down" size={18} color="#64748B" />
@@ -1664,7 +2059,7 @@ export default function App() {
                 {/* ANALYSIS RESULT */}
                 {marketAnalysisLoading ? (
                   <View style={styles.card}>
-                    <ActivityIndicator color="#2E7D32" size="large" style={{ marginVertical: 24 }} />
+                    <ActivityIndicator color="#15803D" size="large" style={{ marginVertical: 24 }} />
                     <Text style={{ textAlign: 'center', color: '#64748B', fontWeight: '600' }}>Finding nearby markets & calculating transport...</Text>
                   </View>
                 ) : marketAnalysisData ? (
@@ -1685,7 +2080,7 @@ export default function App() {
                             <Text style={styles.bestMarketName}>{marketAnalysisData.recommendedMarket?.marketName}</Text>
                             <Text style={styles.bestMarketDist}>{marketAnalysisData.recommendedMarket?.distanceKm} km from your farm</Text>
                           </View>
-                          <Ionicons name="chevron-down-circle-outline" size={24} color="#2E7D32" />
+                          <Ionicons name="chevron-down-circle-outline" size={24} color="#15803D" />
                         </TouchableOpacity>
 
                         <View style={styles.certDivider} />
@@ -1733,15 +2128,15 @@ export default function App() {
 
                       <View style={styles.priceEvidenceCard}>
                         <Text style={styles.priceEvidenceTitle}>AI FAIR PRICE</Text>
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#2E7D32', marginTop: 2 }}>PikMoolya AI</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#15803D', marginTop: 2 }}>PikMoolya AI</Text>
                         <Text style={styles.priceEvidenceValue}>{marketAnalysisData.pricingMetrics?.aiFairPriceRange}</Text>
                         <Text style={styles.priceEvidenceSub}>Grade {aiAssessment?.quality?.grade || 'A'} Assessed</Text>
                       </View>
 
-                      <View style={[styles.priceEvidenceCard, { borderColor: '#2E7D32', backgroundColor: '#E8F5E9' }]}>
-                        <Text style={[styles.priceEvidenceTitle, { color: '#2E7D32' }]}>RECOMMENDED</Text>
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#2E7D32', marginTop: 2 }}>Asking Price</Text>
-                        <Text style={[styles.priceEvidenceValue, { color: '#2E7D32' }]}>{marketAnalysisData.pricingMetrics?.recommendedAskingPrice}</Text>
+                      <View style={[styles.priceEvidenceCard, { borderColor: '#15803D', backgroundColor: '#F0FDF4' }]}>
+                        <Text style={[styles.priceEvidenceTitle, { color: '#15803D' }]}>RECOMMENDED</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#15803D', marginTop: 2 }}>Asking Price</Text>
+                        <Text style={[styles.priceEvidenceValue, { color: '#15803D' }]}>{marketAnalysisData.pricingMetrics?.recommendedAskingPrice}</Text>
                         <Text style={styles.priceEvidenceSub}>Target asking price</Text>
                       </View>
                     </View>
@@ -1751,7 +2146,7 @@ export default function App() {
                       <Text style={styles.sectionHeader}>Nearby Market Comparison</Text>
                       <TouchableOpacity style={styles.dropdownPill} onPress={() => setMarketModalVisible(true)}>
                         <Text style={styles.dropdownPillText}>Select Market</Text>
-                        <Ionicons name="chevron-down" size={14} color="#2E7D32" />
+                        <Ionicons name="chevron-down" size={14} color="#15803D" />
                       </TouchableOpacity>
                     </View>
 
@@ -1788,7 +2183,7 @@ export default function App() {
 
                         <View style={styles.reviewRow}>
                           <Text style={styles.reviewLabel}>Expected Net Selling Return:</Text>
-                          <Text style={[styles.reviewVal, { color: '#2E7D32', fontWeight: '700' }]}>₹{m.expectedNetSellingReturn?.toLocaleString('en-IN')}</Text>
+                          <Text style={[styles.reviewVal, { color: '#15803D', fontWeight: '700' }]}>₹{m.expectedNetSellingReturn?.toLocaleString('en-IN')}</Text>
                         </View>
                       </View>
                     ))}
@@ -1799,7 +2194,7 @@ export default function App() {
                       onPress={() => setShowHowCalculated(!showHowCalculated)}
                     >
                       <Text style={styles.expandCalcBtnText}>How did PikMoolya calculate this?</Text>
-                      <Ionicons name={showHowCalculated ? 'chevron-up' : 'chevron-down'} size={18} color="#2E7D32" />
+                      <Ionicons name={showHowCalculated ? 'chevron-up' : 'chevron-down'} size={18} color="#15803D" />
                     </TouchableOpacity>
 
                     {showHowCalculated && marketAnalysisData.topChoiceCalculationBreakdown ? (
@@ -1831,7 +2226,7 @@ export default function App() {
 
                         <View style={styles.calcRow}>
                           <Text style={[styles.calcLabel, { fontWeight: '700', fontSize: 14 }]}>Expected Net Selling Return:</Text>
-                          <Text style={[styles.calcVal, { fontWeight: '700', fontSize: 15, color: '#2E7D32' }]}>
+                          <Text style={[styles.calcVal, { fontWeight: '700', fontSize: 15, color: '#15803D' }]}>
                             {marketAnalysisData.topChoiceCalculationBreakdown.expectedNetSellingReturn}
                           </Text>
                         </View>
@@ -1981,12 +2376,12 @@ export default function App() {
                     <Text style={styles.inputLabel}>Step 8: Product Photo</Text>
                     <View style={{ flexDirection: 'row', marginVertical: 12 }}>
                       <TouchableOpacity style={[styles.secondaryButton, { flex: 1, marginRight: 6 }]} onPress={handleOpenRealCamera}>
-                        <Ionicons name="camera-outline" size={20} color="#2E7D32" style={{ marginRight: 6 }} />
+                        <Ionicons name="camera-outline" size={20} color="#15803D" style={{ marginRight: 6 }} />
                         <Text style={styles.secondaryBtnText}>{t('takePhoto', lang)}</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity style={[styles.secondaryButton, { flex: 1, marginLeft: 6 }]} onPress={handleOpenGallery}>
-                        <Ionicons name="image-outline" size={20} color="#2E7D32" style={{ marginRight: 6 }} />
+                        <Ionicons name="image-outline" size={20} color="#15803D" style={{ marginRight: 6 }} />
                         <Text style={styles.secondaryBtnText}>{t('chooseFromGallery', lang)}</Text>
                       </TouchableOpacity>
                     </View>
@@ -2008,7 +2403,7 @@ export default function App() {
                   <View style={styles.card}>
                     <Text style={styles.cardTitle}>Step 9: AI Quality Assessment</Text>
                     {qualityLoading ? (
-                      <ActivityIndicator color="#2E7D32" size="large" style={{ marginVertical: 20 }} />
+                      <ActivityIndicator color="#15803D" size="large" style={{ marginVertical: 20 }} />
                     ) : (
                       <View style={styles.qualityScoreRow}>
                         <View style={styles.scoreCircle}>
@@ -2153,44 +2548,99 @@ export default function App() {
                     onAction={() => navigateTo('add')}
                   />
                 ) : (
-                  listings.map((item, idx) => (
-                    <View key={getListingId(item) || idx} style={styles.productCard}>
-                      <View style={styles.productCardHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <View style={styles.cropIconBox}>
-                            <Ionicons name="leaf" size={20} color="#2E7D32" />
+                  listings.map((item, idx) => {
+                    const cName = item.crop?.name || 'Produce';
+                    const imgSrc = getCropImage(cName, item.photoUri || item.imageUrl);
+                    const qtyVal = Number(item.quantity || item.totalAvailableQuantity || 500);
+                    const unitVal = item.unit || 'kg';
+                    const priceVal = Number(item.expectedPrice || item.priceFloor || 32);
+                    const aiFairVal = Math.round(priceVal * 1.05);
+                    const fillPct = Math.min(100, Math.max(20, (qtyVal / 500) * 100));
+
+                    return (
+                      <View key={getListingId(item) || idx} style={styles.mobileProductCard}>
+                        {/* Image Header */}
+                        <View style={styles.cardImageWrapper}>
+                          <Image source={{ uri: imgSrc }} style={styles.cardImage} resizeMode="cover" />
+                          <View style={styles.cardCategoryBadge}>
+                            <Text style={styles.cardCategoryText}>{item.crop?.variety || (lang === 'mr' ? 'शेतमाल' : 'Produce')}</Text>
                           </View>
-                          <View style={{ marginLeft: 10 }}>
-                            <Text style={styles.productName}>{item.crop?.name || 'Produce'}</Text>
-                            <Text style={styles.productQty}>{item.locationName || item.locationApproximate || 'Pune District'}</Text>
+                          <View style={styles.cardGradeBadge}>
+                            <Ionicons name="ribbon" size={13} color="#15803D" />
+                            <Text style={styles.cardGradeText}>Grade A</Text>
+                            <Text style={styles.cardGradeSub}>(88/100)</Text>
                           </View>
                         </View>
-                        <StatusBadge status={item.status || 'Active'} />
-                      </View>
 
-                      <View style={styles.certDivider} />
+                        {/* Content Body */}
+                        <View style={styles.cardContent}>
+                          <View style={styles.cardTitleRow}>
+                            <Text style={styles.cardCropTitle}>{cName}</Text>
+                            <StatusBadge status={item.status || 'Active'} />
+                          </View>
 
-                      <View style={styles.reviewRow}>
-                        <Text style={styles.reviewLabel}>Quantity:</Text>
-                        <Text style={styles.reviewVal}>{item.quantity || item.totalAvailableQuantity || '500'} {item.unit || 'kg'}</Text>
-                      </View>
-                      <View style={styles.reviewRow}>
-                        <Text style={styles.reviewLabel}>Selling Price:</Text>
-                        <Text style={styles.reviewVal}>{money(item.expectedPrice || item.priceFloor)} / {item.unit || 'kg'}</Text>
-                      </View>
+                          <View style={styles.cardLocationRow}>
+                            <Ionicons name="location-outline" size={13} color="#64748B" />
+                            <Text style={styles.cardLocationText}>
+                              {item.locationName || item.locationApproximate || 'Pune APMC Mandi'}
+                            </Text>
+                          </View>
 
-                      <TouchableOpacity
-                        style={styles.outlineButton}
-                        onPress={() => {
-                          setSelectedListing(item);
-                          navigateTo('quality');
-                        }}
-                      >
-                        <Ionicons name="analytics-outline" size={16} color="#2E7D32" style={{ marginRight: 6 }} />
-                        <Text style={styles.outlineBtnText}>View Details & Quality</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
+                          {/* Price Box */}
+                          <View style={styles.cardPriceBox}>
+                            <View style={styles.cardPriceRow}>
+                              <View>
+                                <Text style={styles.priceAskLabel}>{lang === 'mr' ? 'शेतकऱ्याचा भाव' : 'Seller Asking'}</Text>
+                                <Text style={styles.priceAskValue}>
+                                  ₹{priceVal.toLocaleString('en-IN')}{' '}
+                                  <Text style={styles.priceAskUnit}>/{unitVal}</Text>
+                                </Text>
+                              </View>
+                              <View style={styles.aiFairPill}>
+                                <Ionicons name="trending-up" size={12} color="#15803D" />
+                                <Text style={styles.aiFairText}>
+                                  {lang === 'mr' ? 'AI रास्त:' : 'AI Fair:'} ₹{aiFairVal}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Stock Availability */}
+                          <View style={styles.stockBarContainer}>
+                            <View style={styles.stockBarLabelRow}>
+                              <Text style={styles.stockBarLabel}>{lang === 'mr' ? 'उपलब्ध साठा' : 'In Stock'}</Text>
+                              <Text style={styles.stockBarQty}>{qtyVal} {unitVal}</Text>
+                            </View>
+                            <View style={styles.stockBarTrack}>
+                              <View style={[styles.stockBarFill, { width: `${fillPct}%` }]} />
+                            </View>
+                          </View>
+
+                          {/* Actions */}
+                          <View style={styles.cardButtonRow}>
+                            <TouchableOpacity
+                              style={[styles.secondaryButton, { flex: 1, paddingVertical: 10 }]}
+                              onPress={() => {
+                                setSelectedListing(item);
+                                navigateTo('quality');
+                              }}
+                            >
+                              <Ionicons name="analytics-outline" size={15} color="#15803D" style={{ marginRight: 4 }} />
+                              <Text style={styles.secondaryBtnText}>{lang === 'mr' ? 'गुणवत्ता तपासणी' : 'Quality Proof'}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[styles.primaryButtonSmall, { flex: 1, paddingVertical: 10 }]}
+                              onPress={() => navigateTo('offers')}
+                            >
+                              <Ionicons name="pricetag-outline" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                              <Text style={styles.primaryBtnText}>{lang === 'mr' ? 'ऑफर पहा' : 'View Offers'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })
                 )}
               </ScrollView>
             )}
@@ -2202,7 +2652,7 @@ export default function App() {
                   <Text style={styles.sectionHeader}>Offers & Net Return Analysis</Text>
                   <TouchableOpacity style={styles.dropdownPill} onPress={() => setOfferFilterModalVisible(true)}>
                     <Text style={styles.dropdownPillText}>Filter: {selectedOfferFilter}</Text>
-                    <Ionicons name="chevron-down" size={14} color="#2E7D32" />
+                    <Ionicons name="chevron-down" size={14} color="#15803D" />
                   </TouchableOpacity>
                 </View>
 
@@ -2230,8 +2680,8 @@ export default function App() {
                               <Text style={styles.productName}>{offer.buyerName || 'Verified Buyer A (Pune)'}</Text>
                               <Text style={styles.productQty}>{offer.cropName || 'Tomato'} | {offQty} kg</Text>
                             </View>
-                            <View style={[styles.badgeGreenLight, { backgroundColor: isGoodOffer ? '#E8F5E9' : '#FFF7ED' }]}>
-                              <Text style={[styles.badgeTextGreen, { color: isGoodOffer ? '#2E7D32' : '#C05621' }]}>
+                            <View style={[styles.badgeGreenLight, { backgroundColor: isGoodOffer ? '#F0FDF4' : '#FFF7ED' }]}>
+                              <Text style={[styles.badgeTextGreen, { color: isGoodOffer ? '#15803D' : '#C05621' }]}>
                                 {isGoodOffer ? 'GOOD OFFER' : 'CONSIDER NEGOTIATION'}
                               </Text>
                             </View>
@@ -2250,7 +2700,7 @@ export default function App() {
                           </View>
                           <View style={styles.reviewRow}>
                             <Text style={styles.reviewLabel}>Expected Net Selling Return:</Text>
-                            <Text style={[styles.reviewVal, { color: '#2E7D32', fontWeight: '700' }]}>₹{expectedNetReturn.toLocaleString('en-IN')}</Text>
+                            <Text style={[styles.reviewVal, { color: '#15803D', fontWeight: '700' }]}>₹{expectedNetReturn.toLocaleString('en-IN')}</Text>
                           </View>
 
                           <View style={styles.whyBox}>
@@ -2265,8 +2715,11 @@ export default function App() {
                           {offer.status === 'PENDING' || !offer.status ? (
                             <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                               <TouchableOpacity
-                                style={[styles.primaryButton, { flex: 1, backgroundColor: '#2E7D32' }]}
-                                onPress={() => handleAcceptOffer(offer.id)}
+                                style={[styles.primaryButton, { flex: 1, backgroundColor: '#15803D' }]}
+                                onPress={() => {
+                                  setSelectedOfferForAccept(offer);
+                                  setAcceptModalVisible(true);
+                                }}
                               >
                                 <Text style={styles.primaryBtnText}>Accept Offer</Text>
                               </TouchableOpacity>
@@ -2333,7 +2786,7 @@ export default function App() {
                         <Ionicons
                           name={isSelected ? 'radio-button-on' : 'radio-button-off'}
                           size={18}
-                          color={isSelected ? '#2E7D32' : '#94A3B8'}
+                          color={isSelected ? '#15803D' : '#94A3B8'}
                           style={{ marginRight: 8 }}
                         />
                         <View style={{ flex: 1 }}>
@@ -2366,7 +2819,7 @@ export default function App() {
                         <View style={styles.certDivider} />
                         <View style={styles.calcRow}>
                           <Text style={[styles.calcLabel, { fontWeight: '700', fontSize: 13 }]}>UPDATED EXPECTED NET SELLING RETURN:</Text>
-                          <Text style={[styles.calcVal, { fontWeight: '700', fontSize: 15, color: '#2E7D32' }]}>
+                          <Text style={[styles.calcVal, { fontWeight: '700', fontSize: 15, color: '#15803D' }]}>
                             ₹{liveNetReturn.toLocaleString('en-IN')}
                           </Text>
                         </View>
@@ -2377,12 +2830,12 @@ export default function App() {
                   {/* CLEAN ORDER TIMELINE */}
                   <View style={styles.timelineRow}>
                     <View style={styles.timelineStep}>
-                      <Ionicons name="checkmark-circle" size={18} color="#2E7D32" />
+                      <Ionicons name="checkmark-circle" size={18} color="#15803D" />
                       <Text style={styles.timelineLabel}>Confirmed</Text>
                     </View>
                     <View style={styles.timelineLine} />
                     <View style={styles.timelineStep}>
-                      <Ionicons name="cube-outline" size={18} color="#2E7D32" />
+                      <Ionicons name="cube-outline" size={18} color="#15803D" />
                       <Text style={styles.timelineLabel}>Pickup</Text>
                     </View>
                     <View style={styles.timelineLine} />
@@ -2399,7 +2852,7 @@ export default function App() {
             {screen === 'quality' && (
               <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 <TouchableOpacity style={styles.backLink} onPress={() => navigateTo('home')}>
-                  <Ionicons name="arrow-back" size={18} color="#2E7D32" style={{ marginRight: 4 }} />
+                  <Ionicons name="arrow-back" size={18} color="#15803D" style={{ marginRight: 4 }} />
                   <Text style={styles.backLinkText}>{t('home', lang)}</Text>
                 </TouchableOpacity>
 
@@ -2416,7 +2869,7 @@ export default function App() {
                   )}
 
                   {qualityLoading ? (
-                    <ActivityIndicator color="#2E7D32" style={{ marginVertical: 20 }} />
+                    <ActivityIndicator color="#15803D" style={{ marginVertical: 20 }} />
                   ) : (
                     <>
                       <View style={styles.qualityScoreRow}>
@@ -2476,7 +2929,7 @@ export default function App() {
             {screen === 'certificate' && activeCertificate && (
               <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 <TouchableOpacity style={styles.backLink} onPress={() => navigateTo('home')}>
-                  <Ionicons name="arrow-back" size={18} color="#2E7D32" style={{ marginRight: 4 }} />
+                  <Ionicons name="arrow-back" size={18} color="#15803D" style={{ marginRight: 4 }} />
                   <Text style={styles.backLinkText}>{t('home', lang)}</Text>
                 </TouchableOpacity>
 
@@ -2551,12 +3004,12 @@ export default function App() {
 
                   {/* QR Verification Info Box */}
                   <View style={styles.certQrBox}>
-                    <Ionicons name="qr-code-outline" size={60} color="#2E7D32" />
+                    <Ionicons name="qr-code-outline" size={60} color="#15803D" />
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#2E7D32' }}>VERIFY CERTIFICATE</Text>
-                      <Text style={{ fontSize: 10, color: '#5B6B5D' }}>Scan QR code to verify authenticity online.</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#15803D' }}>VERIFY CERTIFICATE</Text>
+                      <Text style={{ fontSize: 10, color: '#64748B' }}>Scan QR code to verify authenticity online.</Text>
                       <TouchableOpacity onPress={() => verifyCertificateOnline(activeCertificate.certificateId)}>
-                        <Text style={{ fontSize: 11, color: '#2E7D32', fontWeight: '700', marginTop: 4 }}>Verify Online</Text>
+                        <Text style={{ fontSize: 11, color: '#15803D', fontWeight: '700', marginTop: 4 }}>Verify Online</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -2577,7 +3030,7 @@ export default function App() {
                     style={[styles.secondaryButton, { flex: 1, marginLeft: 6 }]}
                     onPress={() => handleDownloadPdf(activeCertificate.id, activeCertificate.certificateId)}
                   >
-                    <Ionicons name="share-social-outline" size={18} color="#2E7D32" style={{ marginRight: 6 }} />
+                    <Ionicons name="share-social-outline" size={18} color="#15803D" style={{ marginRight: 6 }} />
                     <Text style={styles.secondaryBtnText}>{t('shareCertificate', lang)}</Text>
                   </TouchableOpacity>
                 </View>
@@ -2588,7 +3041,7 @@ export default function App() {
             {screen === 'verify' && (
               <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 <TouchableOpacity style={styles.backLink} onPress={() => navigateTo('home')}>
-                  <Ionicons name="arrow-back" size={18} color="#2E7D32" style={{ marginRight: 4 }} />
+                  <Ionicons name="arrow-back" size={18} color="#15803D" style={{ marginRight: 4 }} />
                   <Text style={styles.backLinkText}>{t('home', lang)}</Text>
                 </TouchableOpacity>
 
@@ -2635,7 +3088,7 @@ export default function App() {
             {screen === 'my_certificates' && (
               <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 <TouchableOpacity style={styles.backLink} onPress={() => navigateTo('profile')}>
-                  <Ionicons name="arrow-back" size={18} color="#2E7D32" style={{ marginRight: 4 }} />
+                  <Ionicons name="arrow-back" size={18} color="#15803D" style={{ marginRight: 4 }} />
                   <Text style={styles.backLinkText}>{t('profile', lang)}</Text>
                 </TouchableOpacity>
 
@@ -2680,26 +3133,60 @@ export default function App() {
             {/* BUYER HOME DASHBOARD & SEARCH */}
             {(screen === 'home' || screen === 'buyer' || screen === 'buyer_search') && (
               <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                <View style={styles.welcomeBox}>
-                  <Text style={styles.greetingTitle}>{t('welcome', lang)}, {userName || t('buyer', lang)} </Text>
-                  <Text style={styles.greetingSub}>Direct Farm Produce Marketplace</Text>
+                {/* LIVE AGRICULTURAL EXCHANGE HEADER (MATCHING WEBSITE MARKETPLACE) */}
+                <View style={styles.marketplaceHeaderBox}>
+                  <View style={styles.exchangeBadge}>
+                    <Ionicons name="storefront" size={13} color="#15803D" />
+                    <Text style={styles.exchangeBadgeText}>LIVE AGRICULTURAL EXCHANGE</Text>
+                  </View>
+                  <Text style={styles.marketplaceTitle}>
+                    {lang === 'mr' ? 'थेट शेतमाल बाजारपेठ' : 'Direct Produce Marketplace'}
+                  </Text>
+                  <Text style={styles.marketplaceSub}>
+                    {lang === 'mr'
+                      ? 'महाराष्ट्रातील थेट प्रमाणित शेतकऱ्यांचा शेतमाल, AI रास्त भाव आणि गुणवत्ता गुणपत्रिकेसह.'
+                      : 'Direct farm harvests from certified Maharashtra farmers with AI fair prices and quality scores.'}
+                  </Text>
                 </View>
 
+                {/* SEARCH INPUT */}
                 <View style={styles.searchBarBox}>
                   <Ionicons name="search-outline" size={20} color="#718096" style={{ marginRight: 8 }} />
                   <TextInput
-                    style={{ flex: 1, fontSize: 14, color: '#1C2A1E' }}
+                    style={{ flex: 1, fontSize: 14, color: '#0F172A' }}
                     placeholder={t('searchCrops', lang)}
                     value={buyerRequiredQty}
                     onChangeText={setBuyerRequiredQty}
                   />
                 </View>
 
+                {/* HORIZONTAL CATEGORY FILTER PILLS (EXACT WEBSITE PARITY) */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilterScroll}>
+                  {[
+                    { label: lang === 'mr' ? 'सर्व शेतमाल' : 'All Produce', value: 'ALL' },
+                    { label: lang === 'mr' ? '🌾 गहू' : '🌾 Wheat', value: 'WHEAT' },
+                    { label: lang === 'mr' ? '🍚 तांदूळ' : '🍚 Rice & Paddy', value: 'RICE' },
+                    { label: lang === 'mr' ? '🌿 ज्वारी' : '🌿 Jowar', value: 'JOWAR' },
+                    { label: lang === 'mr' ? '🌱 सोयाबीन' : '🌱 Soybean', value: 'SOYBEAN' },
+                    { label: lang === 'mr' ? '🧅 कांदा' : '🧅 Onion & Veg', value: 'ONION' },
+                  ].map((cat) => (
+                    <TouchableOpacity
+                      key={cat.value}
+                      style={[styles.catFilterPill, activeMarketCategory === cat.value && styles.catFilterPillActive]}
+                      onPress={() => setActiveMarketCategory(cat.value)}
+                    >
+                      <Text style={[styles.catFilterText, activeMarketCategory === cat.value && styles.catFilterTextActive]}>
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
                 {/* MAKE OFFER MODAL FORM IF A LISTING IS SELECTED */}
                 {selectedBuyerListing ? (
-                  <View style={[styles.card, { borderColor: '#2E7D32', borderWidth: 2 }]}>
+                  <View style={[styles.card, { borderColor: '#15803D', borderWidth: 2 }]}>
                     <View style={styles.cardHeaderRow}>
-                      <Text style={styles.cardTitle}>Submit Offer for {selectedBuyerListing.crop?.name || 'Produce'}</Text>
+                      <Text style={styles.cardTitle}>Submit Offer for {selectedBuyerListing.crop?.name || selectedBuyerListing.cropName || 'Produce'}</Text>
                       <TouchableOpacity onPress={() => setSelectedBuyerListing(null)}>
                         <Ionicons name="close-circle" size={22} color="#64748B" />
                       </TouchableOpacity>
@@ -2742,53 +3229,117 @@ export default function App() {
                 ) : null}
 
                 <Text style={styles.sectionHeader}>{t('recommendedProduce', lang)}</Text>
-                {buyerDashboard?.produce && buyerDashboard.produce.length > 0 ? (
-                  buyerDashboard.produce.map((item: any, idx: number) => (
-                    <View key={item.listingId || idx} style={styles.productCard}>
-                      <View style={styles.productCardHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <View style={styles.cropIconBox}>
-                            <Ionicons name="leaf" size={20} color="#2E7D32" />
+                {(() => {
+                  const rawList = (buyerDashboard?.produce && buyerDashboard.produce.length > 0)
+                    ? buyerDashboard.produce
+                    : (marketplaceProducts && marketplaceProducts.length > 0)
+                    ? marketplaceProducts
+                    : [
+                        { id: 'def-1', cropName: 'Wheat (Sharbati)', location: 'Pune APMC Mandi', expectedPrice: 24.5, predictedFairPrice: 24, quantity: 500, unit: 'kg', quality: { grade: 'A', score: 92 } },
+                        { id: 'def-2', cropName: 'Rice (Basmati)', location: 'Nashik APMC Mandi', expectedPrice: 32, predictedFairPrice: 31.5, quantity: 400, unit: 'kg', quality: { grade: 'A', score: 88 } },
+                        { id: 'def-3', cropName: 'Soybean (Yellow)', location: 'Latur APMC Mandi', expectedPrice: 44, predictedFairPrice: 43.5, quantity: 600, unit: 'kg', quality: { grade: 'B', score: 82 } },
+                        { id: 'def-4', cropName: 'Jowar (Maldandi)', location: 'Solapur APMC Mandi', expectedPrice: 28.5, predictedFairPrice: 28, quantity: 350, unit: 'kg', quality: { grade: 'A', score: 90 } },
+                      ];
+
+                  const filtered = rawList.filter((item: any) => {
+                    const cName = (item.crop?.name || item.cropName || '').toLowerCase();
+                    if (activeMarketCategory === 'WHEAT') return cName.includes('wheat') || cName.includes('gehun');
+                    if (activeMarketCategory === 'RICE') return cName.includes('rice') || cName.includes('chawal') || cName.includes('paddy');
+                    if (activeMarketCategory === 'JOWAR') return cName.includes('jowar') || cName.includes('sorghum');
+                    if (activeMarketCategory === 'SOYBEAN') return cName.includes('soybean') || cName.includes('soya');
+                    if (activeMarketCategory === 'ONION') return cName.includes('onion') || cName.includes('kanda') || cName.includes('veg') || cName.includes('tomato');
+                    return true;
+                  });
+
+                  return filtered.map((item: any, idx: number) => {
+                    const cName = item.crop?.name || item.cropName || 'Produce';
+                    const imgSrc = getCropImage(cName, item.photoUri || item.imageUrl);
+                    const qtyVal = Number(item.quantity || item.totalAvailableQuantity || 500);
+                    const unitVal = item.unit || 'kg';
+                    const priceVal = Number(item.expectedPrice || 35);
+                    const aiFairVal = item.predictedFairPrice || Math.round(priceVal * 0.96);
+                    const gradeVal = item.quality?.grade || item.qualityCategory?.replace('Grade ', '') || 'A';
+                    const scoreVal = item.quality?.score || Math.round(item.qualityScore || 86);
+                    const fillPct = Math.min(100, Math.max(20, (qtyVal / 500) * 100));
+
+                    return (
+                      <View key={item.id || item.listingId || idx} style={styles.mobileProductCard}>
+                        {/* Image Header */}
+                        <View style={styles.cardImageWrapper}>
+                          <Image source={{ uri: imgSrc }} style={styles.cardImage} resizeMode="cover" />
+                          <View style={styles.cardCategoryBadge}>
+                            <Text style={styles.cardCategoryText}>{item.crop?.variety || (lang === 'mr' ? 'शेतमाल' : 'Agricultural Produce')}</Text>
                           </View>
-                          <View style={{ marginLeft: 10 }}>
-                            <Text style={styles.productName}>{item.crop?.name || item.cropName || 'Produce'}</Text>
-                            <Text style={styles.productQty}>{item.location || item.locationApproximate || 'Pune District'}</Text>
+                          <View style={styles.cardGradeBadge}>
+                            <Ionicons name="ribbon" size={13} color="#15803D" />
+                            <Text style={styles.cardGradeText}>Grade {gradeVal}</Text>
+                            <Text style={styles.cardGradeSub}>({scoreVal}/100)</Text>
                           </View>
                         </View>
-                        <View style={styles.badgeGreenLight}>
-                          <Text style={styles.badgeTextGreen}>Grade {item.quality?.grade || 'A'}</Text>
+
+                        {/* Content Body */}
+                        <View style={styles.cardContent}>
+                          <View style={styles.cardTitleRow}>
+                            <Text style={styles.cardCropTitle}>{cName}</Text>
+                            <View style={styles.badgeGreenLight}>
+                              <Text style={styles.badgeTextGreen}>Verified Farm</Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.cardLocationRow}>
+                            <Ionicons name="location-outline" size={13} color="#64748B" />
+                            <Text style={styles.cardLocationText}>
+                              {item.location || item.locationApproximate || 'Pune APMC Mandi'}
+                            </Text>
+                          </View>
+
+                          {/* Price Box */}
+                          <View style={styles.cardPriceBox}>
+                            <View style={styles.cardPriceRow}>
+                              <View>
+                                <Text style={styles.priceAskLabel}>{lang === 'mr' ? 'शेतकऱ्याचा भाव' : 'Seller Asking Price'}</Text>
+                                <Text style={styles.priceAskValue}>
+                                  ₹{priceVal.toLocaleString('en-IN')}{' '}
+                                  <Text style={styles.priceAskUnit}>/{unitVal}</Text>
+                                </Text>
+                              </View>
+                              <View style={styles.aiFairPill}>
+                                <Ionicons name="trending-up" size={12} color="#15803D" />
+                                <Text style={styles.aiFairText}>
+                                  {lang === 'mr' ? 'AI रास्त:' : 'AI Fair:'} ₹{aiFairVal}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Stock Availability */}
+                          <View style={styles.stockBarContainer}>
+                            <View style={styles.stockBarLabelRow}>
+                              <Text style={styles.stockBarLabel}>{lang === 'mr' ? 'उपलब्ध साठा' : 'Available Stock'}</Text>
+                              <Text style={styles.stockBarQty}>{qtyVal} {unitVal}</Text>
+                            </View>
+                            <View style={styles.stockBarTrack}>
+                              <View style={[styles.stockBarFill, { width: `${fillPct}%` }]} />
+                            </View>
+                          </View>
+
+                          {/* Action Button */}
+                          <TouchableOpacity
+                            style={[styles.primaryButton, { paddingVertical: 12 }]}
+                            onPress={() => {
+                              setSelectedBuyerListing(item);
+                              setBuyerOfferPrice(String(item.expectedPrice || 34));
+                              setBuyerOfferQuantity(String(item.quantity || 500));
+                            }}
+                          >
+                            <Ionicons name="pricetag-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                            <Text style={styles.primaryBtnText}>{t('makeOffer', lang)}</Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
-
-                      <View style={styles.certDivider} />
-
-                      <View style={styles.reviewRow}>
-                        <Text style={styles.reviewLabel}>Available Qty:</Text>
-                        <Text style={styles.reviewVal}>{item.quantity || item.totalAvailableQuantity || 500} {item.unit || 'kg'}</Text>
-                      </View>
-
-                      <View style={styles.reviewRow}>
-                        <Text style={styles.reviewLabel}>Farmer Asking Price:</Text>
-                        <Text style={[styles.reviewVal, { color: '#2E7D32', fontWeight: '700' }]}>₹{item.expectedPrice || 35}/kg</Text>
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.primaryButton}
-                        onPress={() => {
-                          setSelectedBuyerListing(item);
-                          setBuyerOfferPrice(String(item.expectedPrice || 34));
-                          setBuyerOfferQuantity(String(item.quantity || 500));
-                        }}
-                      >
-                        <Text style={styles.primaryBtnText}>{t('makeOffer', lang)}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
-                ) : (
-                  <View style={styles.card}>
-                    <Text style={styles.cardSubText}>Loading direct produce marketplace listings...</Text>
-                  </View>
-                )}
+                    );
+                  });
+                })()}
               </ScrollView>
             )}
 
@@ -2819,7 +3370,7 @@ export default function App() {
 
                       <View style={styles.reviewRow}>
                         <Text style={styles.reviewLabel}>My Offered Price:</Text>
-                        <Text style={[styles.reviewVal, { color: '#2E7D32', fontWeight: '700' }]}>₹{offer.offerPrice}/kg</Text>
+                        <Text style={[styles.reviewVal, { color: '#15803D', fontWeight: '700' }]}>₹{offer.offerPrice}/kg</Text>
                       </View>
 
                       <View style={styles.reviewRow}>
@@ -2934,7 +3485,7 @@ export default function App() {
                   <PikMoolyaLogo size="medium" />
                 </View>
                 <View style={styles.avatarCircle}>
-                  <Ionicons name="person" size={32} color="#2E7D32" />
+                  <Ionicons name="person" size={32} color="#15803D" />
                 </View>
                 <Text style={styles.profileName}>{userName || 'User'}</Text>
                 <Text style={styles.profileSub}>{phone}</Text>
@@ -2951,7 +3502,7 @@ export default function App() {
                     navigateTo('my_certificates');
                   }}
                 >
-                  <Ionicons name="ribbon-outline" size={18} color="#2E7D32" style={{ marginRight: 6 }} />
+                  <Ionicons name="ribbon-outline" size={18} color="#15803D" style={{ marginRight: 6 }} />
                   <Text style={styles.outlineBtnText}>{t('myCertificates', lang)}</Text>
                 </TouchableOpacity>
               )}
@@ -2960,7 +3511,7 @@ export default function App() {
                 style={[styles.outlineButton, { marginTop: 10 }]}
                 onPress={() => setLangModalVisible(true)}
               >
-                <Ionicons name="globe-outline" size={18} color="#2E7D32" style={{ marginRight: 6 }} />
+                <Ionicons name="globe-outline" size={18} color="#15803D" style={{ marginRight: 6 }} />
                 <Text style={styles.outlineBtnText}>Language: {lang === 'en' ? 'English' : lang === 'mr' ? 'मराठी' : 'हिंदी'}</Text>
               </TouchableOpacity>
 
@@ -2992,12 +3543,12 @@ export default function App() {
                         isMe ? styles.chatBubbleRight : styles.chatBubbleLeft,
                       ]}
                     >
-                      <Text style={[styles.chatSender, isMe && { color: '#E8F5E9' }]}>
+                      <Text style={[styles.chatSender, isMe && { color: '#F0FDF4' }]}>
                         {msg.senderName} ({msg.senderRole})
                       </Text>
                       {msg.linkedItem ? (
                         <View style={[styles.chatLinkedBadge, isMe && { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                          <Ionicons name="link-outline" size={12} color={isMe ? '#FFFFFF' : '#2E7D32'} />
+                          <Ionicons name="link-outline" size={12} color={isMe ? '#FFFFFF' : '#15803D'} />
                           <Text style={[styles.chatLinkedBadgeText, isMe && { color: '#FFFFFF' }]}>
                             {msg.linkedItem}
                           </Text>
@@ -3098,27 +3649,27 @@ export default function App() {
         {userRole === 'FARMER' && (
           <>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('home')}>
-              <Ionicons name={screen === 'home' ? 'home' : 'home-outline'} size={20} color={screen === 'home' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'home' ? 'home' : 'home-outline'} size={20} color={screen === 'home' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'home' && styles.navLabelActive]}>{t('home', lang)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('listing')}>
-              <Ionicons name={screen === 'listing' ? 'leaf' : 'leaf-outline'} size={20} color={screen === 'listing' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'listing' ? 'leaf' : 'leaf-outline'} size={20} color={screen === 'listing' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'listing' && styles.navLabelActive]}>Products</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('offers')}>
-              <Ionicons name={screen === 'offers' ? 'pricetag' : 'pricetag-outline'} size={20} color={screen === 'offers' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'offers' ? 'pricetag' : 'pricetag-outline'} size={20} color={screen === 'offers' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'offers' && styles.navLabelActive]}>{t('offers', lang)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('orders')}>
-              <Ionicons name={screen === 'orders' ? 'receipt' : 'receipt-outline'} size={20} color={screen === 'orders' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'orders' ? 'receipt' : 'receipt-outline'} size={20} color={screen === 'orders' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'orders' && styles.navLabelActive]}>{t('orders', lang)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('messages')}>
-              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'messages' && styles.navLabelActive]}>Messages</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('profile')}>
-              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'profile' && styles.navLabelActive]}>{t('profile', lang)}</Text>
             </TouchableOpacity>
           </>
@@ -3127,23 +3678,23 @@ export default function App() {
         {userRole === 'BUYER' && (
           <>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('buyer')}>
-              <Ionicons name={(screen === 'home' || screen === 'buyer') ? 'storefront' : 'storefront-outline'} size={20} color={(screen === 'home' || screen === 'buyer') ? '#2E7D32' : '#718096'} />
+              <Ionicons name={(screen === 'home' || screen === 'buyer') ? 'storefront' : 'storefront-outline'} size={20} color={(screen === 'home' || screen === 'buyer') ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, (screen === 'home' || screen === 'buyer') && styles.navLabelActive]}>Market</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('offers')}>
-              <Ionicons name={screen === 'offers' ? 'pricetag' : 'pricetag-outline'} size={20} color={screen === 'offers' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'offers' ? 'pricetag' : 'pricetag-outline'} size={20} color={screen === 'offers' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'offers' && styles.navLabelActive]}>My Offers</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('orders')}>
-              <Ionicons name={screen === 'orders' ? 'receipt' : 'receipt-outline'} size={20} color={screen === 'orders' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'orders' ? 'receipt' : 'receipt-outline'} size={20} color={screen === 'orders' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'orders' && styles.navLabelActive]}>{t('orders', lang)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('messages')}>
-              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'messages' && styles.navLabelActive]}>Messages</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('profile')}>
-              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'profile' && styles.navLabelActive]}>{t('profile', lang)}</Text>
             </TouchableOpacity>
           </>
@@ -3152,19 +3703,19 @@ export default function App() {
         {userRole === 'LOGISTICS_PARTNER' && (
           <>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('home')}>
-              <Ionicons name={screen === 'home' ? 'bus' : 'bus-outline'} size={20} color={screen === 'home' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'home' ? 'bus' : 'bus-outline'} size={20} color={screen === 'home' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'home' && styles.navLabelActive]}>Deliveries</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('orders')}>
-              <Ionicons name={screen === 'orders' ? 'receipt' : 'receipt-outline'} size={20} color={screen === 'orders' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'orders' ? 'receipt' : 'receipt-outline'} size={20} color={screen === 'orders' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'orders' && styles.navLabelActive]}>My Jobs</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('messages')}>
-              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'messages' && styles.navLabelActive]}>Messages</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('profile')}>
-              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'profile' && styles.navLabelActive]}>{t('profile', lang)}</Text>
             </TouchableOpacity>
           </>
@@ -3173,27 +3724,27 @@ export default function App() {
         {userRole === 'ADMIN' && (
           <>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('home')}>
-              <Ionicons name={screen === 'home' ? 'stats-chart' : 'stats-chart-outline'} size={20} color={screen === 'home' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'home' ? 'stats-chart' : 'stats-chart-outline'} size={20} color={screen === 'home' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'home' && styles.navLabelActive]}>Overview</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('users')}>
-              <Ionicons name={screen === 'users' ? 'people' : 'people-outline'} size={20} color={screen === 'users' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'users' ? 'people' : 'people-outline'} size={20} color={screen === 'users' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'users' && styles.navLabelActive]}>Users</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('orders')}>
-              <Ionicons name={screen === 'orders' ? 'bus' : 'bus-outline'} size={20} color={screen === 'orders' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'orders' ? 'bus' : 'bus-outline'} size={20} color={screen === 'orders' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'orders' && styles.navLabelActive]}>Logistics</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('reports')}>
-              <Ionicons name={screen === 'reports' ? 'document-text' : 'document-text-outline'} size={20} color={screen === 'reports' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'reports' ? 'document-text' : 'document-text-outline'} size={20} color={screen === 'reports' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'reports' && styles.navLabelActive]}>Reports</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('messages')}>
-              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'messages' ? 'chatbubbles' : 'chatbubbles-outline'} size={20} color={screen === 'messages' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'messages' && styles.navLabelActive]}>Messages</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('profile')}>
-              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#2E7D32' : '#718096'} />
+              <Ionicons name={screen === 'profile' ? 'person' : 'person-outline'} size={20} color={screen === 'profile' ? '#15803D' : '#718096'} />
               <Text style={[styles.navLabel, screen === 'profile' && styles.navLabelActive]}>{t('profile', lang)}</Text>
             </TouchableOpacity>
           </>
@@ -3294,6 +3845,17 @@ export default function App() {
           setSelectedOfferForCounter(null);
         }}
       />
+
+      {/* ACCEPT OFFER MODAL WITH OPTIONAL LOGISTICS (OPTION A vs OPTION B) */}
+      <AcceptOfferModal
+        visible={acceptModalVisible}
+        offer={selectedOfferForAccept}
+        onAccept={handleAcceptOffer}
+        onClose={() => {
+          setAcceptModalVisible(false);
+          setSelectedOfferForAccept(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -3301,7 +3863,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAF6',
+    backgroundColor: '#F8FAFC',
   },
   authScrollContainer: {
     paddingHorizontal: 24,
@@ -3365,7 +3927,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   segmentTextActive: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontWeight: '700',
   },
   authFormContainer: {
@@ -3425,7 +3987,7 @@ const styles = StyleSheet.create({
   },
   forgotPassText: {
     fontSize: 12,
-    color: '#2E7D32',
+    color: '#15803D',
     fontWeight: '600',
   },
   errorMessageBox: {
@@ -3459,13 +4021,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mainSubmitBtn: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#15803D',
     height: 48,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
-    shadowColor: '#2E7D32',
+    shadowColor: '#15803D',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -3496,7 +4058,7 @@ const styles = StyleSheet.create({
   switchLink: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
   },
   authFootnote: {
     marginTop: 28,
@@ -3520,12 +4082,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: '#2E7D32',
+    borderColor: '#15803D',
     marginBottom: 16,
     overflow: 'hidden',
   },
   bestMarketHeader: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#15803D',
     paddingVertical: 8,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -3637,14 +4199,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 10,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     borderRadius: 10,
     marginBottom: 12,
   },
   expandCalcBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
     marginRight: 6,
   },
   calcBreakdownCard: {
@@ -3693,8 +4255,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   logisticsChipSelected: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#2E7D32',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#15803D',
   },
   logisticsName: {
     fontSize: 13,
@@ -3703,7 +4265,7 @@ const styles = StyleSheet.create({
   },
   logisticsNameSelected: {
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
   },
   logisticsSub: {
     fontSize: 11,
@@ -3715,7 +4277,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   logisticsCostSelected: {
-    color: '#2E7D32',
+    color: '#15803D',
   },
   liveProfitBox: {
     backgroundColor: '#F0FDF4',
@@ -3751,7 +4313,7 @@ const styles = StyleSheet.create({
   dropdownPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
@@ -3760,7 +4322,7 @@ const styles = StyleSheet.create({
   dropdownPillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
   },
   unitSelectorRow: {
     flexDirection: 'row',
@@ -3778,8 +4340,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   unitBtnSelected: {
-    backgroundColor: '#2E7D32',
-    borderColor: '#2E7D32',
+    backgroundColor: '#15803D',
+    borderColor: '#15803D',
   },
   unitBtnText: {
     fontSize: 13,
@@ -3793,22 +4355,22 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1C2A1E',
+    color: '#0F172A',
     marginTop: 12,
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#F8FAF6',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   primaryButton: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#15803D',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -3817,7 +4379,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryButtonSmall: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#15803D',
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -3830,7 +4392,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   secondaryButton: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -3838,13 +4400,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryBtnText: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontSize: 14,
     fontWeight: '600',
   },
   outlineButton: {
     borderWidth: 1,
-    borderColor: '#2E7D32',
+    borderColor: '#15803D',
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
@@ -3853,7 +4415,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   outlineBtnText: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -3870,11 +4432,11 @@ const styles = StyleSheet.create({
   greetingTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   greetingSub: {
     fontSize: 13,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginTop: 2,
     lineHeight: 18,
   },
@@ -3894,32 +4456,32 @@ const styles = StyleSheet.create({
   priceCardLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#5B6B5D',
+    color: '#64748B',
   },
   badgeGreenLight: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
   },
   badgeTextGreen: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontSize: 12,
     fontWeight: '600',
   },
   priceAmount: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
     marginTop: 6,
   },
   priceUnit: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#5B6B5D',
+    color: '#64748B',
   },
   priceActionBtn: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
@@ -3928,14 +4490,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   priceActionBtnText: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontWeight: '600',
     fontSize: 14,
   },
   sectionHeader: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
     marginTop: 16,
     marginBottom: 10,
   },
@@ -3956,7 +4518,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
@@ -3964,11 +4526,11 @@ const styles = StyleSheet.create({
   quickActionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   quickActionSub: {
     fontSize: 12,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginTop: 2,
   },
   cardHeaderRow: {
@@ -3977,14 +4539,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  cardTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   cardSubText: {
     fontSize: 13,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginBottom: 12,
   },
   miniProductRow: {
@@ -3995,11 +4563,11 @@ const styles = StyleSheet.create({
   miniProductName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   miniProductQty: {
     fontSize: 14,
-    color: '#5B6B5D',
+    color: '#64748B',
   },
   productCard: {
     backgroundColor: '#FFFFFF',
@@ -4008,6 +4576,161 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  mobileProductCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardImageWrapper: {
+    position: 'relative',
+    width: '100%',
+    height: 150,
+    backgroundColor: '#F1F5F9',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cardCategoryBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  cardCategoryText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  cardGradeBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardGradeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  cardGradeSub: {
+    fontSize: 9,
+    color: '#64748B',
+  },
+  cardContent: {
+    padding: 14,
+  },
+  cardCropTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  cardLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  cardLocationText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginLeft: 4,
+  },
+  cardPriceBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 10,
+  },
+  cardPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  priceAskLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  priceAskValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  priceAskUnit: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  aiFairPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    gap: 4,
+  },
+  aiFairText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  stockBarContainer: {
+    marginBottom: 12,
+  },
+  stockBarLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  stockBarLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  stockBarQty: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  stockBarTrack: {
+    height: 5,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  stockBarFill: {
+    height: '100%',
+    backgroundColor: '#15803D',
+    borderRadius: 3,
+  },
+  cardButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   productCardHeader: {
     flexDirection: 'row',
@@ -4018,18 +4741,18 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     justifyContent: 'center',
     alignItems: 'center',
   },
   productName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   productQty: {
     fontSize: 12,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginTop: 2,
   },
   reviewRow: {
@@ -4039,12 +4762,12 @@ const styles = StyleSheet.create({
   },
   reviewLabel: {
     fontSize: 13,
-    color: '#5B6B5D',
+    color: '#64748B',
   },
   reviewVal: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   timelineRow: {
     flexDirection: 'row',
@@ -4060,7 +4783,7 @@ const styles = StyleSheet.create({
   },
   timelineLabel: {
     fontSize: 11,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginTop: 4,
     fontWeight: '600',
   },
@@ -4090,7 +4813,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   navLabelActive: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontWeight: '700',
   },
   backLink: {
@@ -4099,7 +4822,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   backLinkText: {
-    color: '#2E7D32',
+    color: '#15803D',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -4132,29 +4855,29 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#2E7D32',
+    borderColor: '#15803D',
   },
   scoreNumber: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
   },
   scoreMax: {
     fontSize: 10,
-    color: '#5B6B5D',
+    color: '#64748B',
   },
   gradeTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   gradeSub: {
     fontSize: 13,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginTop: 2,
   },
   analysisGrid: {
@@ -4165,7 +4888,7 @@ const styles = StyleSheet.create({
   },
   analysisItem: {
     width: '48%',
-    backgroundColor: '#F8FAF6',
+    backgroundColor: '#F8FAFC',
     borderRadius: 8,
     padding: 10,
     borderWidth: 1,
@@ -4173,12 +4896,12 @@ const styles = StyleSheet.create({
   },
   analysisLabel: {
     fontSize: 11,
-    color: '#5B6B5D',
+    color: '#64748B',
   },
   analysisVal: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
     marginTop: 2,
   },
   certPaperCard: {
@@ -4195,7 +4918,7 @@ const styles = StyleSheet.create({
   certHeaderTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#2E7D32',
+    color: '#15803D',
     letterSpacing: 1,
   },
   certHeaderSub: {
@@ -4227,7 +4950,7 @@ const styles = StyleSheet.create({
   certSectionTitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
     letterSpacing: 0.5,
     marginBottom: 6,
   },
@@ -4266,7 +4989,7 @@ const styles = StyleSheet.create({
   certScoreVal: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
     marginTop: 4,
   },
   certQrBox: {
@@ -4290,7 +5013,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#15803D',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
@@ -4298,11 +5021,11 @@ const styles = StyleSheet.create({
   verifyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   verifySub: {
     fontSize: 13,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginTop: 2,
   },
   advancedBox: {
@@ -4317,7 +5040,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -4325,11 +5048,11 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
   },
   profileSub: {
     fontSize: 13,
-    color: '#5B6B5D',
+    color: '#64748B',
     marginTop: 2,
   },
   wizardHeader: {
@@ -4337,13 +5060,13 @@ const styles = StyleSheet.create({
   },
   wizardStepText: {
     fontSize: 12,
-    color: '#2E7D32',
+    color: '#15803D',
     fontWeight: '700',
   },
   wizardTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1C2A1E',
+    color: '#0F172A',
     marginTop: 2,
   },
   wizardNav: {
@@ -4392,7 +5115,7 @@ const styles = StyleSheet.create({
   priceRowValBold: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
     marginVertical: 4,
   },
   searchBarBox: {
@@ -4441,7 +5164,7 @@ const styles = StyleSheet.create({
   },
   chatBubbleRight: {
     alignSelf: 'flex-end',
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#15803D',
     borderBottomRightRadius: 2,
   },
   chatSender: {
@@ -4453,7 +5176,7 @@ const styles = StyleSheet.create({
   chatLinkedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F0FDF4',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -4464,7 +5187,7 @@ const styles = StyleSheet.create({
   chatLinkedBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#2E7D32',
+    color: '#15803D',
   },
   chatText: {
     fontSize: 14,
@@ -4501,8 +5224,365 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#15803D',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // 1-Click Demo Login Box Styles (Exact Website Mirror)
+  demoLoginBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  demoLoginHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  demoLoginHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  demoLoginRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  demoBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+  },
+  demoBtnFarmer: {
+    borderColor: '#BBF7D0',
+  },
+  demoBtnBuyer: {
+    borderColor: '#BFDBFE',
+  },
+  demoBtnLogistics: {
+    borderColor: '#FDE68A',
+  },
+  demoBtnTextFarmer: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  demoBtnTextBuyer: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  demoBtnTextLogistics: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#D97706',
+  },
+
+  // Hero Platform Banner Styles (matching Web Home Hero)
+  homeHeroBanner: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginBottom: 14,
+    alignItems: 'center',
+    shadowColor: '#15803D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    marginBottom: 10,
+  },
+  heroBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  heroMainTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+    lineHeight: 22,
+  },
+  heroSubText: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+
+  // 2x2 Metric Highlights Grid (matching Web 4 Stat Cards)
+  statsGrid2x2: {
+    flexDirection: 'column',
+    gap: 8,
+    marginBottom: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 3,
+  },
+
+  // Quick Estimator Card (matching Web Preview Calculator)
+  quickCalcCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#BBF7D0',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#15803D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  quickCalcHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  quickCalcTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  quickCalcSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+  calcCropPillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
+  },
+  calcCropPill: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+  },
+  calcCropPillActive: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#15803D',
+  },
+  calcCropPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  calcCropPillTextActive: {
+    color: '#15803D',
+    fontWeight: '700',
+  },
+  calcQtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    backgroundColor: '#F8FAFC',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  calcQtyLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  calcQtyPills: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  calcQtyBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  calcQtyBtnActive: {
+    backgroundColor: '#15803D',
+    borderColor: '#15803D',
+  },
+  calcQtyBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  calcQtyBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  calcResultBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  calcResultLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#15803D',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  calcResultAmount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#166534',
+    marginTop: 2,
+  },
+  calcResultRate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+
+  // Core Architectural Pillars (matching Web 3 Pillars)
+  pillarCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  pillarIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pillarTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  pillarDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+
+  // Buyer Marketplace Header & Category Filter Styles
+  marketplaceHeaderBox: {
+    marginBottom: 12,
+  },
+  exchangeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  exchangeBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#15803D',
+    letterSpacing: 0.5,
+  },
+  marketplaceTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  marketplaceSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  categoryFilterScroll: {
+    marginBottom: 14,
+  },
+  catFilterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+  },
+  catFilterPillActive: {
+    backgroundColor: '#15803D',
+    borderColor: '#15803D',
+  },
+  catFilterText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  catFilterTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

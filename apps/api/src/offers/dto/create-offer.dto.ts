@@ -54,6 +54,10 @@ export class CreateOfferDto {
   paymentTerms?: string;
 
   @IsOptional()
+  @IsString()
+  message?: string;
+
+  @IsOptional()
   @IsDateString()
   expiresAt?: string;
 }

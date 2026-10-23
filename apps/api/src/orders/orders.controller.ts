@@ -22,10 +22,54 @@ export class OrdersController {
   createFromOffer(
     @Req() request: any,
     @Param('offerId') offerId: string,
+    @Body()
+    body?: {
+      logisticsRequired?: boolean;
+      logisticsCost?: number;
+      logisticsPayer?: string;
+      pickupDetails?: string;
+      deliveryDetails?: string;
+    },
   ) {
     return this.ordersService.createFromAcceptedOffer(
       request.user.userId,
       offerId,
+      body,
+    );
+  }
+
+  @Get()
+  getAllOrders(@Req() request: any) {
+    return this.ordersService.getMyOrders(request.user.userId);
+  }
+
+  @Post()
+  createDirectOrder(
+    @Req() request: any,
+    @Body()
+    body: {
+      productId: string;
+      quantity: number;
+      price?: number;
+      logisticsRequired?: boolean;
+      logisticsCost?: number;
+      logisticsPayer?: string;
+      pickupDetails?: string;
+      deliveryDetails?: string;
+    },
+  ) {
+    return this.ordersService.createDirectOrder(
+      request.user.userId,
+      body.productId,
+      Number(body.quantity),
+      body.price ? Number(body.price) : undefined,
+      {
+        logisticsRequired: body.logisticsRequired,
+        logisticsCost: body.logisticsCost,
+        logisticsPayer: body.logisticsPayer,
+        pickupDetails: body.pickupDetails,
+        deliveryDetails: body.deliveryDetails,
+      },
     );
   }
 

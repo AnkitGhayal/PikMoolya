@@ -1,11 +1,28 @@
+# Dependencies
 node_modules/
-.expo/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Build outputs
 dist/
 build/
-.env
-.env.*
-!.env.example
-*.log
+.expo/
 coverage/
 
+# Environment and secrets (Never commit secrets!)
+.env
+.env.*
+.env.local
+!.env.example
+
+# Temporary and log files
+*.log
 *.zip
+*.bak
+screenshots/
+.DS_Store
+Thumbs.db
+*.bak
+*.tsbuildinfo

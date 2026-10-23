@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 
 import { Offer } from './entities/offer.entity.js';
 import { CreateOfferDto } from './dto/create-offer.dto.js';
@@ -28,14 +28,48 @@ export class OffersService {
     @InjectRepository(Negotiation)
     private readonly negotiationRepository: Repository<Negotiation>,
 
+    private readonly dataSource: DataSource,
     private readonly negotiationsService: NegotiationsService,
     private readonly ordersService: OrdersService,
     private readonly logisticsService: LogisticsService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
+  private async resolveUserRoleEntities(userId: string): Promise<{ buyerId: string | null; farmerId: string | null }> {
+    const [buyerRows, farmerRows] = await Promise.all([
+      this.dataSource.query('SELECT id FROM buyers WHERE user_id = $1 LIMIT 1', [userId]),
+      this.dataSource.query('SELECT id FROM farmers WHERE user_id = $1 LIMIT 1', [userId]),
+    ]);
+    return {
+      buyerId: (buyerRows?.[0]?.id as string) || null,
+      farmerId: (farmerRows?.[0]?.id as string) || null,
+    };
+  }
+
+  private async getOrCreateBuyerId(userId: string): Promise<string> {
+    const buyerRows = await this.dataSource.query(
+      'SELECT id FROM buyers WHERE user_id = $1 LIMIT 1',
+      [userId],
+    );
+    if (buyerRows && buyerRows.length > 0) {
+      return buyerRows[0].id;
+    }
+    const userRows = await this.dataSource.query(
+      'SELECT phone, email FROM users WHERE id = $1',
+      [userId],
+    );
+    const bName = userRows?.[0]?.phone ? `Buyer (${userRows[0].phone})` : 'Registered Marketplace Buyer';
+    const newBuyer = await this.dataSource.query(
+      `INSERT INTO buyers (user_id, business_name, buyer_type)
+       VALUES ($1, $2, 'WHOLESALE_TRADER')
+       RETURNING id`,
+      [userId, bName],
+    );
+    return newBuyer[0].id;
+  }
+
   async createOffer(
-    buyerId: string,
+    userId: string,
     dto: CreateOfferDto,
   ) {
     const listing = await this.listingRepository.findOne({
@@ -56,11 +90,14 @@ export class OffersService {
       );
     }
 
-    if (listing.farmerId === buyerId) {
+    const { farmerId: userFarmerId } = await this.resolveUserRoleEntities(userId);
+    if (listing.farmerId === userId || (userFarmerId && listing.farmerId === userFarmerId)) {
       throw new BadRequestException(
         'A farmer cannot place an offer on their own listing',
       );
     }
+
+    const resolvedBuyerId = await this.getOrCreateBuyerId(userId);
 
     const transport = Number(
       dto.transportCostPerUnit ?? 0,
@@ -96,7 +133,7 @@ export class OffersService {
       await this.offerRepository.save(
         this.offerRepository.create({
           listingId: dto.listingId,
-          buyerId,
+          buyerId: resolvedBuyerId,
           auctionId: dto.auctionId ?? null,
           quantity: dto.quantity ? Number(dto.quantity) : Number(listing.quantity),
           offeredPricePerUnit:
@@ -116,6 +153,17 @@ export class OffersService {
         }),
       );
 
+    await this.negotiationRepository.save(
+      this.negotiationRepository.create({
+        offerId: savedOffer.id,
+        actorUserId: userId,
+        action: 'OFFER' as any,
+        pricePerUnit: Number(savedOffer.offeredPricePerUnit),
+        message: dto.message || (dto.deliveryTerms ? `Terms: ${dto.deliveryTerms}` : 'Initial purchase offer submitted.'),
+        aiSuggested: false,
+      }),
+    );
+
     const cropName = listing.crop?.name || 'Produce';
 
     // Notify Farmer
@@ -130,7 +178,7 @@ export class OffersService {
 
     // Notify Buyer
     await this.notificationsService.createNotification({
-      userId: buyerId,
+      userId: userId,
       role: 'BUYER',
       title: '✓ Offer Sent Successfully',
       body: `Your offer of ₹${savedOffer.offeredPricePerUnit}/unit for ${cropName} has been sent to the farmer.`,
@@ -238,15 +286,20 @@ export class OffersService {
     };
   }
 
-  async getFarmerOffers(farmerId: string) {
+  async getFarmerOffers(userId: string) {
+    const { farmerId } = await this.resolveUserRoleEntities(userId);
     const listings = await this.listingRepository.find({
-      where: { farmerId },
+      where: [
+        { farmerId: userId },
+        ...(farmerId ? [{ farmerId }] : []),
+      ],
+      relations: { crop: true },
     });
 
     const listingIds = listings.map((l) => l.id);
 
     if (listingIds.length === 0) {
-      return { farmerId, offers: [], offerCount: 0 };
+      return { farmerId: userId, offers: [], offerCount: 0 };
     }
 
     const offers = await this.offerRepository
@@ -265,33 +318,54 @@ export class OffersService {
     });
 
     return {
-      farmerId,
+      farmerId: userId,
       offers: result,
       offerCount: result.length,
     };
   }
 
-  async getBuyerOffers(buyerId: string) {
+  async getBuyerOffers(userId: string) {
+    const { buyerId } = await this.resolveUserRoleEntities(userId);
     const offers =
       await this.offerRepository.find({
-        where: {
-          buyerId,
-        },
+        where: [
+          { buyerId: userId },
+          ...(buyerId ? [{ buyerId }] : []),
+        ],
         order: {
           createdAt: 'DESC',
         },
       });
 
+    const listingIds = [...new Set(offers.map((o) => o.listingId))];
+    const listings = listingIds.length > 0
+      ? await this.listingRepository.find({
+          where: { id: In(listingIds) },
+          relations: { crop: true },
+        })
+      : [];
+
+    const enrichedOffers = offers.map((offer) => {
+      const listing = listings.find((l) => l.id === offer.listingId);
+      return {
+        ...offer,
+        cropName: listing?.crop?.name || 'Produce',
+        unit: listing?.unit || 'kg',
+        listingPrice: listing?.expectedPrice ? Number(listing.expectedPrice) : null,
+      };
+    });
+
     return {
-      buyerId,
-      offers,
-      offerCount: offers.length,
+      buyerId: userId,
+      offers: enrichedOffers,
+      offerCount: enrichedOffers.length,
     };
   }
 
   async acceptOffer(
     userId: string,
     offerId: string,
+    dto?: OfferActionDto,
   ) {
     const offer = await this.offerRepository.findOne({
       where: { id: offerId },
@@ -303,13 +377,18 @@ export class OffersService {
 
     const listing = await this.listingRepository.findOne({
       where: { id: offer.listingId },
+      relations: { crop: true },
     });
 
     if (!listing) {
       throw new NotFoundException('Produce listing not found');
     }
 
-    if (listing.farmerId !== userId && offer.buyerId !== userId) {
+    const { buyerId, farmerId } = await this.resolveUserRoleEntities(userId);
+    const isBuyer = offer.buyerId === userId || (buyerId && offer.buyerId === buyerId);
+    const isFarmer = listing.farmerId === userId || (farmerId && listing.farmerId === farmerId);
+
+    if (!isBuyer && !isFarmer) {
       throw new BadRequestException('You are not authorized to accept this offer');
     }
 
@@ -326,36 +405,48 @@ export class OffersService {
         actorUserId: userId,
         action: 'ACCEPT',
         pricePerUnit: Number(offer.offeredPricePerUnit),
-        message: 'Offer accepted.',
+        message: dto?.message || 'Offer accepted.',
         aiSuggested: false,
       }),
     );
 
-    // Automatically create Order
+    const isLogisticsRequired = Boolean(dto?.logisticsRequired);
+
+    // Create Order with explicit logistics decision
     let createdOrderResult: any = null;
     let logisticsRequest: any = null;
 
     try {
-      createdOrderResult = await this.ordersService.createFromAcceptedOffer(userId, offer.id);
-      if (createdOrderResult?.order) {
+      createdOrderResult = await this.ordersService.createFromAcceptedOffer(userId, offer.id, {
+        logisticsRequired: isLogisticsRequired,
+        logisticsCost: dto?.logisticsCost,
+        logisticsPayer: dto?.logisticsPayer || 'BUYER',
+        pickupDetails: dto?.pickupDetails,
+        deliveryDetails: dto?.deliveryDetails,
+      });
+
+      if (isLogisticsRequired && createdOrderResult?.order) {
         logisticsRequest = await this.logisticsService.createForOrder(
           createdOrderResult.order,
           listing.crop?.name || 'Produce',
           listing.unit || 'kg',
         );
       }
-    } catch (e) {
-      // Ignore if order already exists
+    } catch (e: any) {
+      console.warn('Could not create order from accepted offer:', e?.message || e);
     }
 
     const cropName = listing.crop?.name || 'Produce';
+    const logisticsNote = isLogisticsRequired
+      ? 'Delivery requested via logistics partner.'
+      : 'Self-pickup / direct transportation arranged between parties.';
 
     // Notify Farmer & Buyer
     await this.notificationsService.createNotification({
       userId: listing.farmerId,
       role: 'FARMER',
       title: '✓ Offer Confirmed & Order Created',
-      body: `Offer of ₹${offer.offeredPricePerUnit}/unit for ${cropName} was accepted. Order created and delivery requested.`,
+      body: `Offer of ₹${offer.offeredPricePerUnit}/unit for ${cropName} was accepted. ${logisticsNote}`,
       type: 'OFFER_ACCEPTED',
       referenceId: offer.id,
     });
@@ -363,8 +454,8 @@ export class OffersService {
     await this.notificationsService.createNotification({
       userId: offer.buyerId,
       role: 'BUYER',
-      title: '✓ Counter Offer Accepted & Order Created',
-      body: `Your transaction for ${cropName} at ₹${offer.offeredPricePerUnit}/unit is confirmed. Order created and delivery requested.`,
+      title: '✓ Offer Accepted & Order Confirmed',
+      body: `Your transaction for ${cropName} at ₹${offer.offeredPricePerUnit}/unit is confirmed. ${logisticsNote}`,
       type: 'OFFER_ACCEPTED',
       referenceId: offer.id,
     });
@@ -373,8 +464,11 @@ export class OffersService {
       offer: saved,
       order: createdOrderResult?.order ?? null,
       logisticsRequest: logisticsRequest ?? null,
+      logisticsRequired: isLogisticsRequired,
       action: 'ACCEPTED',
-      message: '✓ Offer accepted successfully. Order creation and logistics request initiated.',
+      message: isLogisticsRequired
+        ? '✓ Offer accepted. Order created and delivery partner requested.'
+        : '✓ Offer accepted. Order created for direct self-pickup/transportation.',
     };
   }
 
@@ -482,7 +576,8 @@ export class OffersService {
     );
 
     const listing = await this.listingRepository.findOne({ where: { id: offer.listingId } });
-    const isFarmer = listing?.farmerId === userId;
+    const { buyerId, farmerId } = await this.resolveUserRoleEntities(userId);
+    const isFarmer = listing?.farmerId === userId || (farmerId && listing?.farmerId === farmerId);
     const recipientId = isFarmer ? offer.buyerId : listing?.farmerId;
 
     if (recipientId) {
@@ -504,9 +599,13 @@ export class OffersService {
     };
   }
 
-  async withdrawOffer(buyerId: string, offerId: string) {
+  async withdrawOffer(userId: string, offerId: string) {
+    const { buyerId } = await this.resolveUserRoleEntities(userId);
     const offer = await this.offerRepository.findOne({
-      where: { id: offerId, buyerId },
+      where: [
+        { id: offerId, buyerId: userId },
+        ...(buyerId ? [{ id: offerId, buyerId }] : []),
+      ],
     });
 
     if (!offer) {
@@ -520,9 +619,94 @@ export class OffersService {
     offer.status = 'CANCELLED';
     const saved = await this.offerRepository.save(offer);
 
+    await this.negotiationRepository.save(
+      this.negotiationRepository.create({
+        offerId: saved.id,
+        actorUserId: userId,
+        action: 'REJECT' as any,
+        pricePerUnit: Number(saved.offeredPricePerUnit),
+        message: 'Offer withdrawn by buyer.',
+        aiSuggested: false,
+      }),
+    );
+
     return {
       offer: saved,
       message: '✓ Offer withdrawn successfully.',
+    };
+  }
+
+  async getOfferHistory(userId: string, offerId: string) {
+    const offer = await this.offerRepository.findOne({
+      where: { id: offerId },
+    });
+
+    if (!offer) {
+      throw new NotFoundException('Offer not found');
+    }
+
+    const listing = await this.listingRepository.findOne({
+      where: { id: offer.listingId },
+      relations: { crop: true },
+    });
+
+    const { buyerId, farmerId } = await this.resolveUserRoleEntities(userId);
+    const isBuyer = offer.buyerId === userId || (buyerId && offer.buyerId === buyerId);
+    const isFarmer = listing?.farmerId === userId || (farmerId && listing?.farmerId === farmerId);
+
+    if (!isBuyer && !isFarmer) {
+      const user = await this.dataSource.query('SELECT role FROM users WHERE id = $1', [userId]);
+      if (user?.[0]?.role !== 'ADMIN') {
+        throw new BadRequestException('You are not authorized to view this negotiation history');
+      }
+    }
+
+    const timeline = await this.negotiationRepository.find({
+      where: { offerId },
+      order: { createdAt: 'ASC' },
+    });
+
+    const actorIds = [...new Set(timeline.map((t) => t.actorUserId))];
+    const userMap: Record<string, { role: string; phone: string }> = {};
+    if (actorIds.length > 0) {
+      const users = await this.dataSource.query(
+        'SELECT id, role, phone FROM users WHERE id = ANY($1)',
+        [actorIds],
+      );
+      for (const u of users) {
+        userMap[u.id] = { role: u.role, phone: u.phone };
+      }
+    }
+
+    const enrichedTimeline = timeline.map((entry) => ({
+      id: entry.id,
+      action: entry.action,
+      pricePerUnit: entry.pricePerUnit ? Number(entry.pricePerUnit) : null,
+      message: entry.message,
+      createdAt: entry.createdAt,
+      actorRole: userMap[entry.actorUserId]?.role || (entry.actorUserId === offer.buyerId ? 'BUYER' : 'FARMER'),
+      isSelf: entry.actorUserId === userId,
+    }));
+
+    const qty = Number(offer.quantity || listing?.quantity || 1);
+    const price = Number(offer.offeredPricePerUnit);
+
+    return {
+      offerId: offer.id,
+      status: offer.status,
+      cropName: listing?.crop?.name || 'Agricultural Produce',
+      unit: listing?.unit || 'kg',
+      originalListingPrice: listing?.expectedPrice ? Number(listing.expectedPrice) : null,
+      currentPricePerUnit: price,
+      quantity: qty,
+      totalValue: price * qty,
+      buyerId: offer.buyerId,
+      farmerId: listing?.farmerId,
+      deliveryTerms: offer.deliveryTerms,
+      paymentTerms: offer.paymentTerms,
+      createdAt: offer.createdAt,
+      updatedAt: offer.updatedAt,
+      timeline: enrichedTimeline,
     };
   }
 }

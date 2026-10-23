@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -28,10 +30,12 @@ import { BuyerOrderDetail } from './pages/buyer/BuyerOrderDetail';
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <div className="app-layout">
-          <Navbar />
+    <LanguageProvider>
+      <AuthProvider>
+        <ToastProvider>
+        <BrowserRouter>
+          <div className="app-layout">
+            <Navbar />
           <div className="main-content">
             <Routes>
               {/* Public Routes */}
@@ -85,6 +89,8 @@ export const App: React.FC = () => {
           </div>
         </div>
       </BrowserRouter>
-    </AuthProvider>
-  );
+    </ToastProvider>
+  </AuthProvider>
+</LanguageProvider>
+);
 };

@@ -22,4 +22,24 @@ export class OfferActionDto {
   @IsOptional()
   @IsString()
   message?: string;
+
+  @IsOptional()
+  logisticsRequired?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  logisticsCost?: number;
+
+  @IsOptional()
+  @IsString()
+  logisticsPayer?: string;
+
+  @IsOptional()
+  @IsString()
+  pickupDetails?: string;
+
+  @IsOptional()
+  @IsString()
+  deliveryDetails?: string;
 }

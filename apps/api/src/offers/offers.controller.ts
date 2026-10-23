@@ -60,11 +60,13 @@ export class OffersController {
   accept(
     @Req() request: any,
     @Param('id') offerId: string,
+    @Body() dto?: OfferActionDto,
   ) {
     const userId = request.user?.userId || request.user?.id;
     return this.offersService.acceptOffer(
       userId,
       offerId,
+      dto,
     );
   }
 
@@ -101,6 +103,18 @@ export class OffersController {
   ) {
     const userId = request.user?.userId || request.user?.id;
     return this.offersService.withdrawOffer(
+      userId,
+      offerId,
+    );
+  }
+
+  @Get(':id/history')
+  getOfferHistory(
+    @Req() request: any,
+    @Param('id') offerId: string,
+  ) {
+    const userId = request.user?.userId || request.user?.id;
+    return this.offersService.getOfferHistory(
       userId,
       offerId,
     );

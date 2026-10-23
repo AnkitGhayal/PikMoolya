@@ -73,6 +73,31 @@ export class Order {
   })
   status: OrderStatus;
 
+  @Column({ name: 'logistics_required', type: 'boolean', default: false })
+  logisticsRequired: boolean;
+
+  @Column({
+    name: 'logistics_cost',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    nullable: true,
+  })
+  logisticsCost: number | null;
+
+  @Column({ name: 'logistics_payer', type: 'varchar', length: 50, nullable: true })
+  logisticsPayer: string | null;
+
+  @Column({ name: 'logistics_status', type: 'varchar', length: 50, default: 'NOT_REQUESTED', nullable: true })
+  logisticsStatus: string | null;
+
+  @Column({ name: 'pickup_details', type: 'text', nullable: true })
+  pickupDetails: string | null;
+
+  @Column({ name: 'delivery_details', type: 'text', nullable: true })
+  deliveryDetails: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
